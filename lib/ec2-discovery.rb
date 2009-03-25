@@ -62,6 +62,9 @@ module ReframeIt
         # add a post-processor to let any subscribers know of
         # changes in availability,
         # and also update our own hosts file
+        #
+        # TODO: automatically consider services disabled if we don't get an
+        # availability message from them within some set amount of time.
         avail_processor.post_process = Proc.new do |msg|
           begin
             msg.services.each do |service|
@@ -131,8 +134,21 @@ module ReframeIt
 
 
         # let everyone know we're available
-        avail_msg = AvailabilityMessage.new(provides, local_ipv4, true)
-        send_message(monitor_queue, avail_msg)
+        if !provides.empty?
+          avail_thread = Thread.new do
+            while true
+              begin
+                avail_msg = AvailabilityMessage.new(provides, local_ipv4, true)
+                send_message(monitor_queue, avail_msg)
+              rescue Exception => ex
+                STDERR.puts "Error trying to send availability message #{avail_msg.inspect}: #{ex}"
+              end
+              sleep 1
+            end
+          end
+
+          avail_thread.join
+        end
 
         # keep listening...
         listener_thread.join
