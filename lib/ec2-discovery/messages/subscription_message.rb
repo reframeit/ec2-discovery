@@ -24,7 +24,7 @@ module ReframeIt
       #  +services+ - the services that this instance is interested in
       #  +response_queue+ - the queue that this instance will be listening on
       ##
-      def initialize(services, response_queue, subscribe = true)
+      def initialize(services=[], response_queue='', subscribe = true)
         @services = services
         @response_queue = response_queue
         @subscribe = subscribe

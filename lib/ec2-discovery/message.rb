@@ -8,8 +8,9 @@ module ReframeIt
     # be serialized and put on the queue. It contains methods for
     # serializing/deserializing the data.
     #
+    # == Subclassing ==
     # Subclasses should override serialized_attributes, and must also
-    # provide a parameterless constructor
+    # provide a parameterless constructor (or a constructor that can be called with no params)
     ##
     class Message
       ##
