@@ -67,7 +67,8 @@ module ReframeIt
                 STDERR.puts "Exception occurred trying to process message #{sqs_msg.inspect}: #{ex}\n\t#{ex.backtrace.join("\n\t")}"
               end
             end
-            
+
+            STDOUT.put "DEBUG: nothing to process, so waiting #{wait_time}s"
             sleep wait_time
           end
         end

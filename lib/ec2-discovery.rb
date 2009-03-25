@@ -123,6 +123,7 @@ module ReframeIt
           avail_proc = AvailabilityProcessor.new
           avail_proc.post_process = Proc.new do |msg|
             begin
+              STDOUT.puts "DEBUG: received availability message #{msg.inspect}"
               update_hosts(avail_proc)
             rescue Exception => ex
               STDERR.puts "Error updating hosts: #{ex}"
@@ -163,7 +164,7 @@ module ReframeIt
       # Our RightAws::SqsGen2 object
       ##
       def sqs
-        @sqs ||= RightAws::SqsGen2.new(@aws_access_key_id, @aws_secret_access_key)
+        @sqs ||= RightAws::SqsGen2.new(@aws_access_key_id, @aws_secret_access_key, :multi_thread => true)
         return @sqs
       end
 
