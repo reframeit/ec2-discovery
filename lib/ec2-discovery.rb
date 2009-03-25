@@ -42,16 +42,20 @@ module ReframeIt
         # of all the available services it is interested in, 
         # that we currently know about.
         sub_processor.post_process = Proc.new do |msg|
-          if msg.subscribe
-            queue = sqs.queue(msg.response_queue)
-            msg.services.each do |service|
-              # send an availability message for each service
-              ipv4addrs = avail_processor.ipv4addrs(service)
-              ipv4addrs.each do |ipv4addr|
-                avail_msg = AvailabilityMessage.new([service],ipv4addr,true)
+          begin
+            if msg.subscribe
+              queue = sqs.queue(msg.response_queue)
+              msg.services.each do |service|
+                # send an availability message for each service
+                ipv4addrs = avail_processor.ipv4addrs(service)
+                ipv4addrs.each do |ipv4addr|
+                  avail_msg = AvailabilityMessage.new([service],ipv4addr,true)
                 send_message(queue, avail_msg)
+                end
               end
             end
+          rescue Exception => ex
+            STDERR.puts "Error during post-process for message #{msg.inspect}: #{ex}"
           end
         end
 
@@ -59,12 +63,16 @@ module ReframeIt
         # changes in availability,
         # and also update our own hosts file
         avail_processor.post_process = Proc.new do |msg|
-          msg.services.each do |service|
-            sub_processor.response_queues(service).each do |response_queue|
-              send_message(sqs.queue(response_queue), msg)
+          begin
+            msg.services.each do |service|
+              sub_processor.response_queues(service).each do |response_queue|
+                send_message(sqs.queue(response_queue), msg)
+              end
+              update_hosts(avail_processor)
             end
-            update_hosts(avail_processor)
-          end
+          rescue Exception => ex
+            STDERR.puts "Error during post-process for message #{msg.inspect}: #{ex}"
+          end            
         end
 
         # TODO: add logic for updating system files.
@@ -107,7 +115,11 @@ module ReframeIt
           listener = QueueListener.new(instance_queue)
           avail_proc = AvailabilityProcessor.new
           avail_proc.post_process = Proc.new do |msg|
-            update_hosts(avail_proc)
+            begin
+              update_hosts(avail_proc)
+            rescue Exception => ex
+              STDERR.puts "Error updating hosts: #{ex}"
+            end
           end
           listener.add_processor(avail_proc)
           listener_thread = listener.listen
