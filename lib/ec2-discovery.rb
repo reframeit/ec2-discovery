@@ -44,12 +44,14 @@ module ReframeIt
         sub_processor.post_process = Proc.new do |msg|
           begin
             if msg.subscribe
+              STDOUT.puts "DEBUG: got subscription #{msg.inspect}"
               queue = sqs.queue(msg.response_queue)
               msg.services.each do |service|
                 # send an availability message for each service
                 ipv4addrs = avail_processor.ipv4addrs(service)
                 ipv4addrs.each do |ipv4addr|
                   avail_msg = AvailabilityMessage.new([service],ipv4addr,true)
+                  STDOUT.puts "DEBUG: sending availability msg #{avail_msg.inspect}"
                 send_message(queue, avail_msg)
                 end
               end
@@ -66,9 +68,11 @@ module ReframeIt
         # TODO: automatically consider services disabled if we don't get an
         # availability message from them within some set amount of time.
         avail_processor.post_process = Proc.new do |msg|
+          STDOUT.puts "DEBUG: received availability message #{msg.inspect}"
           begin
             msg.services.each do |service|
               sub_processor.response_queues(service).each do |response_queue|
+                STDOUT.puts "DEBUG: sending availability message #{msg.inspect} to #{response_queue}"
                 send_message(sqs.queue(response_queue), msg)
               end
               update_hosts(avail_processor)
@@ -139,6 +143,7 @@ module ReframeIt
             while true
               begin
                 avail_msg = AvailabilityMessage.new(provides, local_ipv4, true)
+                STDOUT.puts "DEBUG: sending availability message #{avail_msg}"
                 send_message(monitor_queue, avail_msg)
               rescue Exception => ex
                 STDERR.puts "Error trying to send availability message #{avail_msg.inspect}: #{ex}"
@@ -383,6 +388,8 @@ module ReframeIt
       # to mitigate corruption risk).
       ##
       def update_hosts(availability_processor)
+        STDOUT.puts "DEBUG: updating hosts..."
+
         marker_begin = "## BEGIN ec2-discovery ##"
         marker_end = "## END ec2-discovery ##"
 
@@ -420,6 +427,7 @@ module ReframeIt
         lines << "#{marker_end}\n"
         
         File.open("/etc/hosts", 'w') {|f| f.write(lines.join("\n"))}
+        STDOUT.puts "Updated hosts"
       end
 
     end
