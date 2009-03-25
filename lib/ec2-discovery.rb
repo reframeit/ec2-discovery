@@ -56,12 +56,14 @@ module ReframeIt
         end
 
         # add a post-processor to let any subscribers know of
-        # chanes in availability
+        # changes in availability,
+        # and also update our own hosts file
         avail_processor.post_process = Proc.new do |msg|
           msg.services.each do |service|
             sub_processor.response_queues(service).each do |response_queue|
               send_message(sqs.queue(response_queue), msg)
             end
+            update_hosts(avail_processor)
           end
         end
 
@@ -90,19 +92,31 @@ module ReframeIt
         end
 
         # TODO: if we're a monitor, we need to have different behavior!
+        is_monitor = services.include?('monitor')
+        
+        if is_monitor
+          listener_thread = monitor()
 
-        # start listening on our instance_queue
-        listener = QueueListener.new(instance_queue)
-        avail_proc = AvailabilityProcessor.new
-        avail_proc.post_process = Proc.new do |msg|
-          # TODO: update /etc/resolv.conf here?
+          # no need to subscribe to specific services
+          # because we'll see all the availability messages anyway
+          
+          # TODO: when we implement distributed monitoring, we will have
+          # to specifically subscribe to services
+        else
+          # start listening on our instance_queue
+          listener = QueueListener.new(instance_queue)
+          avail_proc = AvailabilityProcessor.new
+          avail_proc.post_process = Proc.new do |msg|
+            update_hosts(avail_proc)
+          end
+          listener.add_processor(avail_proc)
+          listener_thread = listener.listen
+          
+          # subscribe to all the services we're interested in
+          sub_msg = SubscriptionMessage.new(subscribes, instance_queue, true)
+          send_message(monitor_queue, sub_msg)
         end
-        listener.add_processor(avail_proc)
-        listener_thread = listener.listen
 
-        # subscribe to all the services we're interested in
-        sub_msg = SubscriptionMessage.new(subscribes, instance_queue, true)
-        send_message(monitor_queue, sub_msg)
 
         # let everyone know we're available
         avail_msg = AvailabilityMessage.new(provides, local_ipv4, true)
@@ -211,6 +225,8 @@ module ReframeIt
       #              any pub/sub takes place
       # disable - if this key is present (the value doesn't matter), then
       #           no pub/sub will take place
+      # local_internal - a hostname to assign to the internal ipv4 address.
+      #           If unspecified, this is set to 'local_internal'
       #
       # == a note about scripts ==
       # remember that they have to be listed as a single line!
@@ -276,6 +292,13 @@ module ReframeIt
       end
 
       ##
+      # the user-data supplied name for the internal ipv4 address
+      ##
+      def local_internal
+        ec2_user_data('local_internal', 'local_internal')
+      end
+
+      ##
       # the pub queue where we send messages
       ##
       def monitor_queue
@@ -300,6 +323,48 @@ module ReframeIt
       ##
       def send_message(queue, msg)
         queue.send_message(msg.to_json)
+      end
+
+      ##
+      # update the system's hosts file according to the known 
+      # availabilities in the given ReframeIt::EC2::AvailabilityProcessor
+      #
+      # host names will be the service name, followed by two digits (01-99)
+      #
+      # == WARNING ==
+      # This is a potentially dangerous operation. It reads the file on
+      # disk, removes any section between "## BEGIN ec2-discovery ##" and 
+      # "## END ec2-discovery ##", then constantly updates the file (re-reading each time
+      # to mitigate corruption risk).
+      ##
+      def update_hosts(availability_processor)
+        marker_begin = "## BEGIN ec2-discovery ##"
+        marker_end = "## END ec2-discovery ##"
+
+        lines = []
+
+        # read the file, stripping out a discovery section if we find one
+        stripping = false
+        File.readlines("/etc/hosts").each do |line|
+          if !stripping && line =~ /^\s*#{marker_begin}/
+              stripping = true
+          elsif stripping && line =~ /^\s*#{marker_end}/
+              stripping = false
+          end
+
+          # TODO: what if one of these ip addresses gets reused later?
+          # for now, just ignoring them
+          lines << line.strip if !stripping
+        end
+
+        lines << "#{marker_begin}"
+        # add the currently available ip addresses and services
+        availability_processor.all_ipv4addrs(true).each do |ip, service_list|
+          lines << "#{ip} #{service_list.join(' ')}"
+        end
+        lines << "#{marker_end}\n"
+        
+        File.open("/etc/hosts", 'w') {|f| f.write(lines.join("\n"))}
       end
 
     end
