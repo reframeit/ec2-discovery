@@ -84,15 +84,16 @@ module ReframeIt
       ##
       def run()
         # first see if we should just exit
-        if user_data('disable')
+        if !ec2_user_data('disable', '').empty?
+          STDERR.puts "disable flag is set, so returning...\n\n"
           return
-        elsif (pre_script = user_data('pre_script'))
+        elsif !(pre_script = ec2_user_data('pre_script', '').empty?)
           puts "Executing pre_script: '#{pre_script}'"
           puts `pre_script`
         end
 
         # TODO: if we're a monitor, we need to have different behavior!
-        is_monitor = services.include?('monitor')
+        is_monitor = provides.include?('monitor')
         
         if is_monitor
           listener_thread = monitor()
@@ -165,7 +166,7 @@ module ReframeIt
       def ec2_fetch_user_data_str
         if !@user_data_str
           Net::HTTP.start("169.254.169.254") do |http|
-            @user_data_str = http.get("/latest/user-data")
+            @user_data_str = http.get("/latest/user-data").body
           end
         end
       end
@@ -370,3 +371,4 @@ module ReframeIt
     end
   end
 end
+

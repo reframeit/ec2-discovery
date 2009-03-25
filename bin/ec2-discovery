@@ -1,0 +1,38 @@
+#!/usr/bin/env ruby
+require 'rubygems'
+
+$:.push File.join(File.dirname(__FILE__), '..', 'lib')
+require 'ec2-discovery'
+
+# For running from the commandline
+if ARGV.length != 2
+  STDERR.puts "Usage: #{$0} <aws_access_key_id> <aws_secret_access_key>"
+  exit 1
+end
+
+discovery = ReframeIt::EC2::Discovery.new(ARGV[0], ARGV[1])
+
+# For testing, inject some user_data into our discoverer
+module ReframeIt
+  module EC2
+    class Discovery
+      alias :ec2_user_data_orig :ec2_user_data
+      def ec2_user_data(key = '', default = '')
+        case key
+        when 'provide'
+          return ['monitor','mysql','solr','int-memcache','ext-memcache','sess-memcache','reframeit-logger','reframeit-services','mysql','solr','reframeit-www','reframeit-api']
+        when 'subscribe'
+          return []
+        when 'disable'
+          return ''
+        when 'local_internal'
+          return 'alchemy'
+        else
+          ec2_user_data_orig(key, default)
+        end
+      end
+    end
+  end
+end
+
+discovery.run
