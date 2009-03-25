@@ -92,7 +92,6 @@ module ReframeIt
           puts `pre_script`
         end
 
-        # TODO: if we're a monitor, we need to have different behavior!
         is_monitor = provides.include?('monitor')
         
         if is_monitor
@@ -114,7 +113,7 @@ module ReframeIt
           listener_thread = listener.listen
           
           # subscribe to all the services we're interested in
-          sub_msg = SubscriptionMessage.new(subscribes, instance_queue, true)
+          sub_msg = SubscriptionMessage.new(subscribes, instance_id, true)
           send_message(monitor_queue, sub_msg)
         end
 
