@@ -1,0 +1,13 @@
+ec2-discovery
+------------------
+
+This gem provides a simple mechanism for coordinating services across
+an EC2 cluster.
+
+TODO: howto / getting started
+TODO: hooking this up as an initscript daemon that uses user-data
+
+
+Author:: Ben Taitelbaum (mailto:ben@reframeit.com)
+Copyright:: Copyright (c) 2009 Reframe It, Inc.
+Homepage:: http://reframeit.com
