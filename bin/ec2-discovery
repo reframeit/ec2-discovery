@@ -25,7 +25,7 @@ module ReframeIt
           return []
         when 'disable'
           return ''
-        when 'local_internal'
+        when 'local_name'
           return 'alchemy'
         else
           ec2_user_data_orig(key, default)

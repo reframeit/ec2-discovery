@@ -148,9 +148,10 @@ module ReframeIt
       ##
       # retrieves the ec2 instance data for the specified key
       ##
-      def ec2_meta_data(key = '')
+      def ec2_meta_data(key = '', default='')
+        value = default
         Net::HTTP.start("169.254.169.254") do |http|
-          value = http.get("/latest/meta-data/#{key}")
+          value = http.get("/latest/meta-data/#{key}").body
         end
 
         return value
@@ -226,8 +227,10 @@ module ReframeIt
       #              any pub/sub takes place
       # disable - if this key is present (the value doesn't matter), then
       #           no pub/sub will take place
-      # local_internal - a hostname to assign to the internal ipv4 address.
-      #           If unspecified, this is set to 'local_internal'
+      # local_name - a hostname to assign to the local ipv4 address.
+      #              If unspecified, this is set to 'local_name'
+      # public_name - a hostname to assign to the public ipv4 address.
+      #               If unspecified, this is set to 'public_name'
       #
       # == a note about scripts ==
       # remember that they have to be listed as a single line!
@@ -263,6 +266,13 @@ module ReframeIt
       end
 
       ##
+      # the aws external ipv4, as read fromt he ec2 meta-data
+      ##
+      def public_ipv4
+        return ec2_meta_data('public-ipv4')
+      end
+
+      ##
       # the user-defined services that this instance provides,
       # as read from the ec2 user-data
       #
@@ -295,8 +305,15 @@ module ReframeIt
       ##
       # the user-data supplied name for the internal ipv4 address
       ##
-      def local_internal
-        ec2_user_data('local_internal', 'local_internal')
+      def local_name
+        ec2_user_data('local_name', 'local_name')
+      end
+
+      ##
+      # the user-data supplied name for the external ipv4 address
+      ##
+      def public_name
+        ec2_user_data('public_name', 'public_name')
       end
 
       ##
@@ -351,16 +368,26 @@ module ReframeIt
               stripping = true
           elsif stripping && line =~ /^\s*#{marker_end}/
               stripping = false
+          else
+            # TODO: what if one of these ip addresses gets reused later?
+            # for now, just ignoring them
+            lines << line.strip if !stripping
           end
-
-          # TODO: what if one of these ip addresses gets reused later?
-          # for now, just ignoring them
-          lines << line.strip if !stripping
         end
 
         lines << "#{marker_begin}"
         # add the currently available ip addresses and services
-        availability_processor.all_ipv4addrs(true).each do |ip, service_list|
+        all_ips = availability_processor.all_ipv4addrs(true)
+
+        # add an alias for our local internal address
+        all_ips[local_ipv4] ||= []
+        all_ips[local_ipv4] << local_name
+
+        # add an alias for our external address
+        all_ips[public_ipv4] ||= []
+        all_ips[public_ipv4] << public_name
+
+        all_ips.each do |ip, service_list|
           lines << "#{ip} #{service_list.join(' ')}"
         end
         lines << "#{marker_end}\n"
