@@ -7,7 +7,17 @@ module ReframeIt
       def Logger.logger
         if !@logger
           @logger = ::Logger.new(STDOUT)
-          @logger.level = ::Logger::DEBUG
+          if ENV['LOGLEVEL']
+            level = ENV['LOGLEVEL'].to_s.upcase
+            if ['DEBUG','INFO','WARN','ERROR','FATAL'].include?(level)
+              @logger.level = eval("::Logger::#{level}")
+            else
+              @logger.level = ::Logger::INFO
+              @logger.error "Unknown level for LOGLEVEL (#{level})!"
+            end
+          else
+            @logger.level = ::Logger::INFO
+          end
         end
         
         @logger

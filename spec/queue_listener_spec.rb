@@ -95,13 +95,13 @@ describe ReframeIt::EC2::QueueListener do
       @queue.send_message(MyMessage.new('msg1').to_json)
       @queue.send_message(MyMessage.new('msg2').to_json)
 
-      sleep 5
+      sleep 2
       queue_listener.stop
       sleep 2
       
       @msgs.size.should == 2
-      @msgs.first.field1.should == 'msg1'
-      @msgs.last.field1.should == 'msg2'
+      @msgs.first.myfield1.should == 'msg1'
+      @msgs.last.myfield1.should == 'msg2'
     end
   end
 end

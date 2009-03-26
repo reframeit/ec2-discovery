@@ -21,6 +21,7 @@ module RightAws
       
       def initialize(sqs=nil, url_or_name=nil)
         @msgs = []
+        @msg_id = 0
       end
       
       def size
@@ -35,7 +36,7 @@ module RightAws
         @msgs.clear
       end
       def send_message(message)
-        msg = Message.new(self, '0000000', nil, message.to_s)
+        msg = Message.new(self, @msg_id += 1, nil, message.to_s)
         @msgs << msg
       end
       alias_method :push, :send_message
@@ -59,10 +60,20 @@ module RightAws
       def get_attribute(attribute='All')
         nil
       end
+
+      # this is not part of the RightAws interface,
+      # but is needed for testing
+      def delete_message(msg)
+        @msgs.delete(msg)
+      end
       
     end
   
-
+    class Message
+      def delete
+        @queue.delete_message(self)
+      end
+    end
     
   end
 end

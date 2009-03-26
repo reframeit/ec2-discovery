@@ -64,7 +64,6 @@ module ReframeIt
           while @keep_going
             sqs_msg = nil
             begin
-              debug { 'retrieving msg...' }
               sqs_msg = sqs_queue.receive
               debug { "msg retrieved: #{sqs_msg.inspect}" }
             rescue Exception => ex
@@ -78,18 +77,14 @@ module ReframeIt
               rescue Exception => ex
                 error "Exception occurred trying to process message #{sqs_msg.inspect}", ex
               end
-            else
-              debug { "no message" }
             end
 
             if !sqs_msg
               debug { "nothing to process, so waiting #{wait_time}s" }
               sleep wait_time
-            else
-              debug { "here!" }
             end
           end
-          info { "listener stopping" }
+          info { "listener stopped!" }
         end
         return listen_thread
       end
