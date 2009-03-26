@@ -1,5 +1,6 @@
 require 'rubygems'
 require 'json'
+require 'ec2-discovery/logger'
 
 module ReframeIt
   module EC2
@@ -10,9 +11,12 @@ module ReframeIt
     #
     # == Subclassing ==
     # Subclasses should override serialized_attributes, and must also
-    # provide a parameterless constructor (or a constructor that can be called with no params)
+    # provide a parameterless constructor 
+    # (or a constructor that can be called with no params)
     ##
     class Message
+      include ReframeIt::EC2::Logger
+
       ##
       # the attributes we want to serialize on the queue
       # This should be overridden for subclasses
@@ -20,7 +24,7 @@ module ReframeIt
       # returns: Array
       ##
       def self.serialized_attributes
-        STDERR.puts "WARNING: serialized_attributes called on base ReframeIt::EC2::Message class!"
+        warn "serialized_attributes called on base ReframeIt::EC2::Message class!"
         []
       end
 
@@ -69,29 +73,6 @@ module ReframeIt
         @available = available
       end
     end
-
-    ##
-    # This type of message indicates that this instance is interested
-    # in any changes to the listed set of services, and will be listening
-    # on the given queue for responses. It should receive initial messages
-    # indicating all the known available services as well as any updates.
-    ##
-    class SubMessage < Message
-      attr_accessor :services, :response_queue
-
-      def self.serialized_attributes
-        [:services, :response_queue]
-      end
-
-      ##
-      # == Params: ==
-      #  +services+ - the services that this instance is interested in
-      #  +response_queue+ - the queue that this instance will be listening on
-      ##
-      def initialize(services, response_queue)
-        @services = services
-        @response_queue = response_queue
-      end
-    end
+    
   end
 end

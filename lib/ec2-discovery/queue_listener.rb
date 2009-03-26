@@ -1,6 +1,10 @@
+require 'ec2-discovery/logger'
+
 module ReframeIt
   module EC2
     class QueueListener
+      include ReframeIt::EC2::Logger
+
       ##
       # the queue that this listener listens to
       ##
@@ -58,19 +62,34 @@ module ReframeIt
         @keep_going = true
         listen_thread = Thread.new do
           while @keep_going
-            while (sqs_msg = sqs_queue.receive) && @keep_going
+            sqs_msg = nil
+            begin
+              debug { 'retrieving msg...' }
+              sqs_msg = sqs_queue.receive
+              debug { "msg retrieved: #{sqs_msg.inspect}" }
+            rescue Exception => ex
+              error "Error retrieving message from queue #{sqs_queue}", ex
+            end
+            if sqs_msg && @keep_going
               begin
                 msg = JSON.parse sqs_msg.body
                 process(msg)
                 sqs_msg.delete
               rescue Exception => ex
-                STDERR.puts "Exception occurred trying to process message #{sqs_msg.inspect}: #{ex}\n\t#{ex.backtrace.join("\n\t")}"
+                error "Exception occurred trying to process message #{sqs_msg.inspect}", ex
               end
+            else
+              debug { "no message" }
             end
 
-            STDOUT.put "DEBUG: nothing to process, so waiting #{wait_time}s"
-            sleep wait_time
+            if !sqs_msg
+              debug { "nothing to process, so waiting #{wait_time}s" }
+              sleep wait_time
+            else
+              debug { "here!" }
+            end
           end
+          info { "listener stopping" }
         end
         return listen_thread
       end
@@ -80,6 +99,7 @@ module ReframeIt
       # seconds from the time this is called for the thread to terminate.
       ##
       def stop
+        debug { "stop requested" }
         @keep_going = false
       end
 

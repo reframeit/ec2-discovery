@@ -1,3 +1,5 @@
+require 'ec2-discovery/logger'
+
 module ReframeIt
   module EC2
     ##
@@ -9,6 +11,7 @@ module ReframeIt
     # leave +process+ as is.
     ##
     class MessageProcessor
+      include ReframeIt::EC2::Logger
 
       ##
       # The subclass of ReframeIt::EC2::Message that this processor
@@ -74,7 +77,7 @@ module ReframeIt
         if @block
           @block.call(msg)
         else
-          STDERR.puts "WARNING: no block was passed in to this processor!"
+          warn "no block was passed in to this processor!"
         end
       end
     end

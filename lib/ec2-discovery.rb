@@ -9,13 +9,17 @@ require 'ec2-discovery/message_processors/subscription_processor'
 
 module ReframeIt
   module EC2
+
     class Discovery
+      include ReframeIt::EC2::Logger
+
       ##
       # Initialize the agent with AWS info
       ##
-      def initialize(aws_access_key_id, aws_secret_access_key)
+      def initialize(aws_access_key_id, aws_secret_access_key, logger = nil)
         @aws_access_key_id = aws_access_key_id
         @aws_secret_access_key = aws_secret_access_key
+        logger = logger if logger
       end
 
       ##
@@ -44,20 +48,20 @@ module ReframeIt
         sub_processor.post_process = Proc.new do |msg|
           begin
             if msg.subscribe
-              STDOUT.puts "DEBUG: got subscription #{msg.inspect}"
+              debug { "got subscription #{msg.inspect}" }
               queue = sqs.queue(msg.response_queue)
               msg.services.each do |service|
                 # send an availability message for each service
                 ipv4addrs = avail_processor.ipv4addrs(service)
                 ipv4addrs.each do |ipv4addr|
                   avail_msg = AvailabilityMessage.new([service],ipv4addr,true)
-                  STDOUT.puts "DEBUG: sending availability msg #{avail_msg.inspect}"
+                  debug { "sending availability msg #{avail_msg.inspect}" }
                 send_message(queue, avail_msg)
                 end
               end
             end
           rescue Exception => ex
-            STDERR.puts "Error during post-process for message #{msg.inspect}: #{ex}"
+            error "Error during post-process for message #{msg.inspect}: #{ex}"
           end
         end
 
@@ -68,17 +72,17 @@ module ReframeIt
         # TODO: automatically consider services disabled if we don't get an
         # availability message from them within some set amount of time.
         avail_processor.post_process = Proc.new do |msg|
-          STDOUT.puts "DEBUG: received availability message #{msg.inspect}"
+          debug { "received availability message #{msg.inspect}" }
           begin
             msg.services.each do |service|
               sub_processor.response_queues(service).each do |response_queue|
-                STDOUT.puts "DEBUG: sending availability message #{msg.inspect} to #{response_queue}"
+                debug { "sending availability message #{msg.inspect} to #{response_queue}" }
                 send_message(sqs.queue(response_queue), msg)
               end
               update_hosts(avail_processor)
             end
           rescue Exception => ex
-            STDERR.puts "Error during post-process for message #{msg.inspect}: #{ex}"
+            error "Error during post-process for message #{msg.inspect}: #{ex}"
           end            
         end
 
@@ -100,11 +104,11 @@ module ReframeIt
       def run()
         # first see if we should just exit
         if !ec2_user_data('disable', '').empty?
-          STDERR.puts "disable flag is set, so returning...\n\n"
+          error "disable flag is set, so returning...\n\n"
           return
         elsif !(pre_script = ec2_user_data('pre_script', '').empty?)
-          puts "Executing pre_script: '#{pre_script}'"
-          puts `pre_script`
+          info "Executing pre_script: '#{pre_script}'"
+          info `pre_script`
         end
 
         is_monitor = provides.include?('monitor')
@@ -123,10 +127,10 @@ module ReframeIt
           avail_proc = AvailabilityProcessor.new
           avail_proc.post_process = Proc.new do |msg|
             begin
-              STDOUT.puts "DEBUG: received availability message #{msg.inspect}"
+              debug { "received availability message #{msg.inspect}" }
               update_hosts(avail_proc)
             rescue Exception => ex
-              STDERR.puts "Error updating hosts: #{ex}"
+              error "Error updating hosts: #{ex}"
             end
           end
           listener.add_processor(avail_proc)
@@ -144,10 +148,10 @@ module ReframeIt
             while true
               begin
                 avail_msg = AvailabilityMessage.new(provides, local_ipv4, true)
-                STDOUT.puts "DEBUG: sending availability message #{avail_msg}"
+                debug { "sending availability message #{avail_msg}" }
                 send_message(monitor_queue, avail_msg)
               rescue Exception => ex
-                STDERR.puts "Error trying to send availability message #{avail_msg.inspect}: #{ex}"
+                error "Error trying to send availability message #{avail_msg.inspect}: #{ex}"
               end
               sleep 1
             end
@@ -219,7 +223,7 @@ module ReframeIt
           line = line.strip
           parts = line.split("=")
           if parts.length < 2
-            STDERR.puts "Warning, user-data line #{line_no} does not conform to specification: '#{line}'"
+            warn "user-data line #{line_no} does not conform to specification: '#{line}'"
           else
             key = parts.first
             value = parts[1..-1].join('') # in case there was an '=' in the value
@@ -389,7 +393,7 @@ module ReframeIt
       # to mitigate corruption risk).
       ##
       def update_hosts(availability_processor)
-        STDOUT.puts "DEBUG: updating hosts..."
+        debug { "updating hosts..." }
 
         marker_begin = "## BEGIN ec2-discovery ##"
         marker_end = "## END ec2-discovery ##"
@@ -428,7 +432,7 @@ module ReframeIt
         lines << "#{marker_end}\n"
         
         File.open("/etc/hosts", 'w') {|f| f.write(lines.join("\n"))}
-        STDOUT.puts "Updated hosts"
+        info { "Updated hosts" }
       end
 
     end

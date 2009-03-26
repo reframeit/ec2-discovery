@@ -59,7 +59,7 @@ module ReframeIt
               if idx_str.length < 2
                 idx_str = "0#{idx_str}"
               elsif idx_str.length > 2
-                STDERR.puts "ERROR: #{service} has #{ip_list.length} ip addresses. Limit is 99!"
+                error "#{service} has #{ip_list.length} ip addresses. Limit is 99!"
                 next
               end
 
