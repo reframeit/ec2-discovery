@@ -121,6 +121,7 @@ describe ReframeIt::EC2::Discovery do
     end
 
     it "should send availability messages to interested subscribers" do
+      @discovery.stub!(:update_hosts)
       @discovery.stub!(:local_ipv4).and_return('1.2.3.4')
       monitor_thread = @discovery.monitor
       sleep 1
@@ -137,6 +138,26 @@ describe ReframeIt::EC2::Discovery do
       received_msg.available.should be_true
       received_msg.ipv4addr.should == '1.2.3.4'
       received_msg.services.should == ['service1']
+    end
+
+    it "should send an unavailable message to interested subscribers when a service is no longer available" do
+      @discovery.stub!(:update_hosts)
+      @discovery.stub!(:local_ipv4).and_return('1.2.3.4')
+      monitor_thread = @discovery.monitor
+      sleep 1
+      sub_msg = ReframeIt::EC2::SubscriptionMessage.new(['service1'], 'response_queue1', true)
+      avail_msg = ReframeIt::EC2::AvailabilityMessage.new(['service1'], '1.2.3.4', true, 3)
+
+      @discovery.send_message(@discovery.monitor_queue, sub_msg)
+      @discovery.send_message(@discovery.monitor_queue, avail_msg)
+      sleep 1
+      @discovery.sqs.queue('response_queue1').pop.should_not be_nil
+      sleep 2*avail_msg.ttl
+      @discovery.sqs.queue('response_queue1').size.should == 1
+      msg = JSON.parse(@discovery.sqs.queue('response_queue1').pop.body)
+      msg.available.should be_false
+      msg.ipv4addr.should == '1.2.3.4'
+      msg.services.should == ['service1']
     end
   end
 
@@ -184,8 +205,7 @@ describe ReframeIt::EC2::Discovery do
 
       sleep 5
       thread1.kill
-      thread2.kill
-      
+      thread2.kill      
     end
   end
 

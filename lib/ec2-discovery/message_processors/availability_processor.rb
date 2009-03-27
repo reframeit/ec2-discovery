@@ -8,11 +8,14 @@ module ReframeIt
     # This processor keeps track of service availabilities
     ##
     class AvailabilityProcessor < MessageProcessor
-      def initialize
+      def initialize()
         super(AvailabilityMessage)
 
         # hash of service name => Array<available ipv4 addresses>
         @available = {}
+        
+        # hash of service name => Hash<ipv4 address => expiration time>
+        @expires = {}
       end
 
       def process_impl(msg)
@@ -20,10 +23,13 @@ module ReframeIt
           msg.services.each do |service|
             @available[service] ||= []
             @available[service] << msg.ipv4addr if !@available[service].include?(msg.ipv4addr)
+            @expires[service] ||= {}
+            @expires[service][msg.ipv4addr] = Time.now + msg.ttl
           end
         else
           msg.services.each do |service|
             @available[service].delete(msg.ipv4addr) if @available[service]
+            @expires[service].delete(msg.ipv4addr) if @expires[service]
           end
         end
       end
@@ -44,12 +50,11 @@ module ReframeIt
       # appended to them, starting at 01. If +to_hostnames+ is false (default), then the
       # same service name may appear multiple times.
       #
-      # TODO: if to_hostnames is set, we currently have a limit of 99 ip addresses for
-      # any given service. We do not currently check this condition.
-      #
       # Returns: hash of ipv4 addresse => array<service names>  (or array<host names>)
       ##
       def all_ipv4addrs(to_hostnames = false)
+        expired
+
         ips = {}
         @available.each do |service, ip_list|
           ip_list.each_with_index do |ip, idx|
@@ -74,6 +79,35 @@ module ReframeIt
         end
 
         return ips
+      end
+
+      ##
+      # get a list of expired services. Also removes these services from
+      # our list of available services, since they're no longer needed.
+      #
+      # Returns: hash of <service name> => array<ipv4addr>
+      ##
+      def expired
+        # service => ip_list
+        to_delete = {}
+
+        @expires.each do |service, ip_expire_list|
+          ip_expire_list.each do |ip, expire|
+            if expire < Time.now
+              to_delete[service] ||= []
+              to_delete[service] << ip
+            end
+          end
+        end
+
+        to_delete.each do |service, ip_list|
+          ip_list.each do |ip|
+            @available[service].delete(ip) if @available[service]
+            @expires[service].delete(ip) if @expires[service]
+          end
+        end
+
+        return to_delete
       end
 
 

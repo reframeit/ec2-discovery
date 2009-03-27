@@ -68,9 +68,6 @@ module ReframeIt
         # add a post-processor to let any subscribers know of
         # changes in availability,
         # and also update our own hosts file
-        #
-        # TODO: automatically consider services disabled if we don't get an
-        # availability message from them within some set amount of time.
         avail_processor.post_process = Proc.new do |msg|
           debug { "received availability message #{msg.inspect}" }
           begin
@@ -86,7 +83,27 @@ module ReframeIt
           end            
         end
 
-        # TODO: add logic for updating system files.
+
+        # TODO: allow control over this thread
+        unavail_thread = Thread.new do
+          while true
+            avail_processor.expired.each do |service, ip_list|
+              sub_processor.response_queues(service).each do |response_queue|
+                ip_list.each do |ip|
+                  msg = AvailabilityMessage.new([service], ip, false, -1)
+                  debug { "sending unavailable message #{msg.inspect} to #{response_queue}" }
+                  begin
+                    send_message(sqs.queue(response_queue), msg)
+                  rescue Exception => ex
+                    error "Error sending unavailable message #{msg.inspect} to #{response_queue}", ex
+                  end
+                end
+              end
+            end
+            sleep 1
+          end
+        end
+        
 
         return listener.listen
       end
