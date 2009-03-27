@@ -515,7 +515,7 @@ module ReframeIt
         lines << "#{marker_end}\n"
         
         File.open("/etc/hosts", 'w') {|f| f.write(lines.join("\n"))}
-        info { "Updated hosts" }
+        debug { "Updated hosts" }
       end
 
     end
