@@ -8,14 +8,21 @@ module ReframeIt
     # This processor keeps track of service availabilities
     ##
     class AvailabilityProcessor < MessageProcessor
-      def initialize()
+      ##
+      # Only the monitor should keep track of services expiring. That
+      # way, the monitor can go down, and current services will maintain
+      # their lists of who else is available.
+      ##
+      def initialize(keep_track_of_expires = false)
         super(AvailabilityMessage)
+
+        @keep_track_of_expires = keep_track_of_expires
 
         # hash of service name => Array<available ipv4 addresses>
         @available = {}
         
         # hash of service name => Hash<ipv4 address => expiration time>
-        @expires = {}
+        @expires = {} if @keep_track_of_expires
       end
 
       def process_impl(msg)
@@ -23,13 +30,18 @@ module ReframeIt
           msg.services.each do |service|
             @available[service] ||= []
             @available[service] << msg.ipv4addr if !@available[service].include?(msg.ipv4addr)
-            @expires[service] ||= {}
-            @expires[service][msg.ipv4addr] = Time.now + msg.ttl
+            if @keep_track_of_expires
+              @expires[service] ||= {}
+              @expires[service][msg.ipv4addr] = Time.now + msg.ttl
+            end
           end
         else
           msg.services.each do |service|
             @available[service].delete(msg.ipv4addr) if @available[service]
-            @expires[service].delete(msg.ipv4addr) if @expires[service]
+            
+            if @keep_track_of_expires
+              @expires[service].delete(msg.ipv4addr) if @expires[service]
+            end
           end
         end
       end
@@ -53,8 +65,6 @@ module ReframeIt
       # Returns: hash of ipv4 addresse => array<service names>  (or array<host names>)
       ##
       def all_ipv4addrs(to_hostnames = false)
-        expired
-
         ips = {}
         @available.each do |service, ip_list|
           ip_list.each_with_index do |ip, idx|

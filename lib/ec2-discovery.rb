@@ -37,7 +37,7 @@ module ReframeIt
       def monitor()
         listener = QueueListener.new(monitor_queue)
         sub_processor = SubscriptionProcessor.new
-        avail_processor = AvailabilityProcessor.new
+        avail_processor = AvailabilityProcessor.new(true)
 
         listener.add_processor(sub_processor)
         listener.add_processor(avail_processor)
