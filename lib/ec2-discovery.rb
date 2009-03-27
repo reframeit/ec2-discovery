@@ -207,7 +207,7 @@ module ReframeIt
           # TODO: when we implement distributed monitoring, we will have
           # to specifically subscribe to services
         else
-          listener_thread = subscribe(subscribes, instance_id, 1)
+          listener_thread = subscribe(subscribes, instance_id, 10)
         end
 
         # even if we're a monitor, we may provide some other services as well.
