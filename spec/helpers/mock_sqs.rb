@@ -4,15 +4,22 @@ require 'sqs/right_sqs_gen2'
 module RightAws
   class SqsGen2
     def initialize(aws_access_key=nil, aws_secret_access_key=nil, params={})
-      @queues = {}
+      @@queues ||= {}
     end
 
     def queue(queue_name, create=true, visibility=nil)
-      if !@queues[queue_name] && create
-        @queues[queue_name] = Queue.new
+      if !@@queues[queue_name] && create
+        @@queues[queue_name] = Queue.new
       end
 
-      return @queues[queue_name]
+      return @@queues[queue_name]
+    end
+
+    ##
+    # this is for our tests
+    ##
+    def reset()
+      @@queues = {}
     end
 
     class Queue

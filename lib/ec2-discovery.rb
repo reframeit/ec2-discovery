@@ -38,7 +38,7 @@ module ReframeIt
         listener = QueueListener.new(monitor_queue)
         sub_processor = SubscriptionProcessor.new
         avail_processor = AvailabilityProcessor.new
-        
+
         listener.add_processor(sub_processor)
         listener.add_processor(avail_processor)
 
@@ -76,7 +76,7 @@ module ReframeIt
           begin
             msg.services.each do |service|
               sub_processor.response_queues(service).each do |response_queue|
-                debug { "sending availability message #{msg.inspect} to #{response_queue}" }
+                debug { "sending availability message #{msg.inspect}" }
                 send_message(sqs.queue(response_queue), msg)
               end
               update_hosts(avail_processor)
@@ -89,6 +89,91 @@ module ReframeIt
         # TODO: add logic for updating system files.
 
         return listener.listen
+      end
+
+      ##
+      # Subscribe to the services we're interested in, and listen for
+      # any changes in availability for those services, updating our
+      # hosts when necessary.
+      #
+      # == Params:
+      # +subscribes+ - array of services we are subscribing to
+      # +queue_name+ - the name of the aws queue we wish to listen on
+      # +subscribe_interval+ - how often we should send a subscription message
+      #
+      # Returns: (running) subscription thread
+      #
+      # TODO: provide a way to stop the subscription thread
+      # FIXME: we just leave the listener thread dangling here
+      ##
+      def subscribe(subscribes = [], queue_name = nil, subscribe_interval=10)
+        # start listening on our queue
+        queue = sqs.queue(queue_name)
+        listener = QueueListener.new(queue)
+        avail_proc = AvailabilityProcessor.new
+        avail_proc.post_process = Proc.new do |msg|
+          begin
+            debug { "received availability message #{msg.inspect}" }
+            update_hosts(avail_proc)
+          rescue Exception => ex
+            error "Error updating hosts", ex
+          end
+        end
+        listener.add_processor(avail_proc)
+        listener_thread = listener.listen
+        
+        subscribe_thread = Thread.new do
+          while true 
+            # subscribe to all the services we're interested in
+            begin
+              sub_msg = SubscriptionMessage.new(subscribes, queue_name, true)
+              debug{ "sending subscription message #{sub_msg.inspect}" }
+              send_message(monitor_queue, sub_msg)
+              debug{ "sleeping for #{subscribe_interval}s" }
+              sleep subscribe_interval
+            rescue Exception => ex
+              error "Error sending subscription message: #{sub_msg.inspect}", ex
+            end
+          end
+        end
+          
+        return subscribe_thread
+      end
+
+      ##
+      # broadcast our availability
+      #
+      # == Params:
+      #  +provides+ array of services we claim to provide
+      #  +interval+ how often we should broadcast our availability. set to -1
+      #             to indicate a one-time broadcast
+      #
+      # Returns: broadcast thread, or nil if there is nothing to broadcast or
+      # this is a one-time broadcast
+      ##
+      def broadcast_availability(provides = [], interval=3)
+        return nil if provides.empty?
+
+        avail_msg = AvailabilityMessage.new(provides, local_ipv4, true)
+        if interval == -1
+          send_message(monitor_queue, avail_msg)
+          return nil
+        end
+
+        # let everyone know we're available
+        avail_thread = Thread.new do
+          while true
+            begin
+              debug { "sending availability message #{avail_msg.inspect}" }
+              send_message(monitor_queue, avail_msg)
+            rescue Exception => ex
+              error "Error trying to send availability message #{avail_msg.inspect}", ex
+            end
+            sleep interval
+          end
+        end
+
+        return avail_thread
       end
 
       ##
@@ -122,43 +207,11 @@ module ReframeIt
           # TODO: when we implement distributed monitoring, we will have
           # to specifically subscribe to services
         else
-          # start listening on our instance_queue
-          listener = QueueListener.new(instance_queue)
-          avail_proc = AvailabilityProcessor.new
-          avail_proc.post_process = Proc.new do |msg|
-            begin
-              debug { "received availability message #{msg.inspect}" }
-              update_hosts(avail_proc)
-            rescue Exception => ex
-              error "Error updating hosts", ex
-            end
-          end
-          listener.add_processor(avail_proc)
-          listener_thread = listener.listen
-          
-          # subscribe to all the services we're interested in
-          sub_msg = SubscriptionMessage.new(subscribes, instance_id, true)
-          send_message(monitor_queue, sub_msg)
+          listener_thread = subscribe(subscribes, instance_id, 1)
         end
 
-
-        # let everyone know we're available
-        if !provides.empty?
-          avail_thread = Thread.new do
-            while true
-              begin
-                avail_msg = AvailabilityMessage.new(provides, local_ipv4, true)
-                debug { "sending availability message #{avail_msg}" }
-                send_message(monitor_queue, avail_msg)
-              rescue Exception => ex
-                error "Error trying to send availability message #{avail_msg.inspect}", ex
-              end
-              sleep 1
-            end
-          end
-
-          avail_thread.join
-        end
+        # even if we're a monitor, we may provide some other services as well.
+        avail_thread = broadcast_availability(provides, 3)
 
         # keep listening...
         listener_thread.join

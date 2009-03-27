@@ -3,14 +3,17 @@ require File.join(File.dirname(__FILE__), 'helpers', 'spec_helper')
 describe ReframeIt::EC2::Discovery do
   before(:each) do 
     @discovery = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
+    @discovery.sqs.reset
   end
 
-  def inject_ec2_user_data_str(user_data_str)
+  def inject_ec2_user_data_str(user_data_str, discovery = nil)
+    discovery ||= @discovery
+
     # first clear the @user_data hash
-    @discovery.instance_eval("@user_data = nil")
+    discovery.instance_eval("@user_data = nil")
     
     # then inject a new unparsed data string
-    @discovery.instance_eval("@user_data_str = '#{user_data_str}'")
+    discovery.instance_eval("@user_data_str = '#{user_data_str}'")
   end
 
   # tests the string parsing
@@ -118,6 +121,7 @@ describe ReframeIt::EC2::Discovery do
     end
 
     it "should send availability messages to interested subscribers" do
+      @discovery.stub!(:local_ipv4).and_return('1.2.3.4')
       monitor_thread = @discovery.monitor
       sleep 1
       sub_msg = ReframeIt::EC2::SubscriptionMessage.new(['service1'], 'response_queue1', true)
@@ -133,6 +137,55 @@ describe ReframeIt::EC2::Discovery do
       received_msg.available.should be_true
       received_msg.ipv4addr.should == '1.2.3.4'
       received_msg.services.should == ['service1']
+    end
+  end
+
+  describe "run" do
+    it "should allow two hosts to coordinate availability" do
+      discovery1 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
+      discovery2 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
+      
+      discovery1.stub!(:ec2_user_data).and_return('')
+      discovery2.stub!(:ec2_user_data).and_return('')
+
+      discovery1.stub!(:provides).and_return(['monitor','service_a'])
+      discovery1.stub!(:subscribes).and_return([])
+
+      discovery2.stub!(:provides).and_return(['service_b'])
+      discovery2.stub!(:subscribes).and_return(['service_b'])
+
+      discovery1.stub!(:local_ipv4).and_return('1.1.1.1')
+      discovery2.stub!(:local_ipv4).and_return('2.2.2.2')
+      discovery2.stub!(:instance_id).and_return('discovery2')
+
+      discovery1.should_receive(:update_hosts).at_least(:once) { |avail_proc|
+        all_ips = avail_proc.all_ipv4addrs(true)
+        all_ips.has_key?('1.1.1.1').should be_true
+        all_ips.has_key?('2.2.2.2').should be_true
+        all_ips['1.1.1.1'].include?('monitor01').should be_true
+        all_ips['1.1.1.1'].include?('service_a01').should be_true
+        all_ips['2.2.2.2'].include?('service_b01').should be_true
+      }
+      
+      discovery2.should_receive(:update_hosts).at_least(:once) { |avail_proc|
+        all_ips = avail_proc.all_ipv4addrs(true)
+        all_ips.has_key?('1.1.1.1').should be_true
+        all_ips.has_key?('2.2.2.2').should be_false # we're not subscribing to our own services
+        all_ips['1.1.1.1'].should == ['service_a01']
+      }
+      
+      thread1 = Thread.new do
+        discovery1.run
+      end
+
+      thread2 = Thread.new do
+        discovery2.run
+      end
+
+      sleep 5
+      thread1.kill
+      thread2.kill
+      
     end
   end
 
