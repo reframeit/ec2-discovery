@@ -369,12 +369,16 @@ module ReframeIt
       # Returns: array of strings
       ##
       def provides
-        provides = ec2_user_data('provide')
-        if !provides || provides.empty?
-          return []
-        else
-          return provides.is_a?(Array) ? provides : [provides]
+        if !@provides
+          @provides = ec2_user_data('provide')
+          if !@provides || @provides.empty?
+            @provides = []
+          elsif !@provides.is_a?(Array)
+            @provides = [@provides]
+          end
         end
+
+        @provides
       end
 
       ##
@@ -384,11 +388,37 @@ module ReframeIt
       # Returns: array of strings
       ##
       def subscribes
-        subscribes = ec2_user_data('subscribe')
-        if !subscribes || subscribes.empty?
-          return []
-        else
-          return subscribes.is_a?(Array) ? subscribes : [subscribes]
+        if !@subscribes
+          @subscribes = ec2_user_data('subscribe')
+          if !@subscribes || @subscribes.empty?
+            @subscribes = []
+          elsif !@subscribes.is_a?(Array)
+            @subscribes = [@subscribes]
+          end
+        end
+
+        @subscribes
+      end
+
+      ##
+      # manually set the list of services provided by this instance, 
+      # rather than having to look in the ec2 user-data
+      ##
+      def provides=(services)
+        @provides = services
+        if !@provides.is_a?(Array)
+          @provides = [@provides]
+        end
+      end
+
+      ##
+      # manually set the list of services this instance is interested in,
+      # rather than having to look in the ec2 user-data
+      ##
+      def subscribes=(services)
+        @subscribes = services
+        if !@subscribes.is_a?(Array)
+          @subscribes = [@subscribes]
         end
       end
 

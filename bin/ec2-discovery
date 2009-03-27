@@ -1,38 +1,74 @@
 #!/usr/bin/env ruby
+require 'optparse'
+require 'ostruct'
 require 'rubygems'
 
 $:.push File.join(File.dirname(__FILE__), '..', 'lib')
 require 'ec2-discovery'
 
-# For running from the commandline
-if ARGV.length != 2
-  STDERR.puts "Usage: #{$0} <aws_access_key_id> <aws_secret_access_key>"
+options = OpenStruct.new
+options.subscribes = []
+options.provides = []
+options.aws_access_key = ''
+options.aws_secret_key = ''
+options.is_monitor = false
+
+opts = OptionParser.new do |opts|
+  opts.banner = "Usage: #{$0} [options]"
+  opts.separator "--------------------------------------------------"
+  opts.separator " Launch an ec2-discovery service, which keeps"
+  opts.separator " track of where services are in your EC2 cluster"
+  opts.separator " "
+  opts.separator " If any of --monitor, --subscribes, or --provides "
+  opts.separator " are used, then the provides and subscribes lists "
+  opts.separator " specified here (even if empty) will take "
+  opts.separator " precedence over any 'provide' or 'subscribe' "
+  opts.separator " user-data passed into the EC2 instance when it "
+  opts.separator " was launched."
+  opts.separator "--------------------------------------------------"
+  opts.separator " "
+
+  opts.on("-a", "--access-key USER", "The user's AWS access key ID") do |a|
+    options.aws_access_key = a
+  end
+  opts.on("-s", "--secret-key PASSWORD", "The user's AWS secret access key") do |s|
+    options.aws_secret_key = s
+  end
+
+  opts.on("-m", "--monitor", "This instance should serve as a monitor, keeping track of other instances' subscriptions and notifying them of availability. This overrides the 'provide' user-data passed in when the ec2 instance was launched.") do |m|
+    opts.is_monitor = m
+  end
+
+  opts.on("-S", "--subscribes svc1,svc2,svc3", Array,
+          "Specifies which services this instance should subscribe to. This overrides the 'subscribe' user-data passed in when the ec2 instance was launched.") do |svcs|
+    options.subscribes = svcs
+  end
+
+  opts.on("-P", "--provides svc1,svc2,svc3", Array,
+          "Specifies which services this instance provides. This overrides the 'provide' user-data passed in when the ec2 instance was launched.") do |svcs|
+    options.provides = svcs
+  end
+
+  opts.on("-h", "--help", "Show this message") do
+    puts opts
+    exit 0
+  end
+end
+
+begin
+  opts.parse(ARGV)
+rescue SystemExit => ex
+  # ignore, this is from --help
+  exit 0
+rescue Exception => ex
+  STDERR.puts ex.inspect
+  STDERR.puts opts
   exit 1
 end
 
-discovery = ReframeIt::EC2::Discovery.new(ARGV[0], ARGV[1])
-
-# For testing, inject some user_data into our discoverer
-#module ReframeIt
-#  module EC2
-#    class Discovery
-#      alias :ec2_user_data_orig :ec2_user_data
-#      def ec2_user_data(key = '', default = '')
-#        case key
-#        when 'provide'
-#          return ['monitor','mysql','solr','int-memcache','ext-memcache','sess-memcache','reframeit-logger','reframeit-services','mysql','solr','reframeit-www','reframeit-api']
-#        when 'subscribe'
-#          return []
-#        when 'disable'
-#          return ''
-#        when 'local_name'
-#          return 'alchemy'
-#        else
-#          ec2_user_data_orig(key, default)
-#        end
-#      end
-#    end
-#  end
-#end
+discovery = ReframeIt::EC2::Discovery.new(options.aws_access_key, options.aws_secret_key)
+options.provides << 'monitor' if options.is_monitor && !options.provides.include?('monitor')
+discovery.subscribes = options.subscribes
+discovery.provides = options.provides
 
 discovery.run
