@@ -36,7 +36,7 @@ opts = OptionParser.new do |opts|
   end
 
   opts.on("-m", "--monitor", "This instance should serve as a monitor, keeping track of other instances' subscriptions and notifying them of availability. This overrides the 'provide' user-data passed in when the ec2 instance was launched.") do |m|
-    opts.is_monitor = m
+    options.is_monitor = m
   end
 
   opts.on("-S", "--subscribes svc1,svc2,svc3", Array,
@@ -61,7 +61,7 @@ rescue SystemExit => ex
   # ignore, this is from --help
   exit 0
 rescue Exception => ex
-  STDERR.puts ex.inspect
+  STDERR.puts "#{ex.class}:#{ex}\n#{ex.backtrace.join("\n")}"
   STDERR.puts opts
   exit 1
 end
