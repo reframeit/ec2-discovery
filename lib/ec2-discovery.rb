@@ -213,6 +213,12 @@ module ReframeIt
         # even if we're a monitor, we may provide some other services as well.
         avail_thread = broadcast_availability(provides, 3)
 
+        sleep 3
+        if !(post_script = ec2_user_data('post_script', '').empty?)
+          info "Executing post_script: '#{post_script}'"
+          info `post_script`
+        end
+
         # keep listening...
         listener_thread.join
       end
@@ -315,6 +321,8 @@ module ReframeIt
       #
       # pre_script - a standard bash script that should be executed before
       #              any pub/sub takes place
+      # post_script - a standard bash script that should be executed after
+      #               the discovery has started
       # disable - if this key is present (the value doesn't matter), then
       #           no pub/sub will take place
       # local_name - a hostname to assign to the local ipv4 address.
