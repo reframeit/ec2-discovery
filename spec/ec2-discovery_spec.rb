@@ -1,7 +1,7 @@
 require File.join(File.dirname(__FILE__), 'helpers', 'spec_helper')
 
 describe ReframeIt::EC2::Discovery do
-  before(:all) do 
+  before(:each) do 
     @discovery = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
   end
 
@@ -72,4 +72,68 @@ describe ReframeIt::EC2::Discovery do
       @discovery.ec2_user_data('key1').should == ['value1a', 'value1b']
     end
   end
+
+  describe "monitor" do
+    it "should receive existing subscription messages" do
+      @discovery.should_not_receive(:update_hosts)
+      msg = ReframeIt::EC2::SubscriptionMessage.new(['service1'], 'response_queue1', true)
+      @discovery.send_message(@discovery.monitor_queue, msg)
+      @discovery.monitor_queue.size.should == 1
+      monitor_thread = @discovery.monitor
+      sleep 2
+      @discovery.monitor_queue.size.should == 0
+    end
+
+    it "should receive existing availability messages" do
+      @discovery.should_receive(:update_hosts).once
+      msg = ReframeIt::EC2::AvailabilityMessage.new(['service1'], '1.2.3.4', true)
+      @discovery.send_message(@discovery.monitor_queue, msg)
+      @discovery.monitor_queue.size.should == 1
+      monitor_thread = @discovery.monitor
+      sleep 2
+      @discovery.monitor_queue.size.should == 0
+    end
+
+    it "should receive new subscription messages" do
+      @discovery.should_not_receive(:update_hosts)
+      monitor_thread = @discovery.monitor
+      sleep 1
+      msg = ReframeIt::EC2::SubscriptionMessage.new(['service1'], 'response_queue1', true)
+      @discovery.send_message(@discovery.monitor_queue, msg)
+      @discovery.monitor_queue.size.should == 1
+      sleep 1
+      @discovery.monitor_queue.size.should == 0
+    end
+
+    it "should receive new availability messages" do
+      @discovery.should_receive(:update_hosts).once
+      monitor_thread = @discovery.monitor
+      sleep 1
+
+      msg = ReframeIt::EC2::AvailabilityMessage.new(['service1'], '1.2.3.4', true)
+      @discovery.send_message(@discovery.monitor_queue, msg)
+      @discovery.monitor_queue.size.should == 1
+      sleep 1
+      @discovery.monitor_queue.size.should == 0
+    end
+
+    it "should send availability messages to interested subscribers" do
+      monitor_thread = @discovery.monitor
+      sleep 1
+      sub_msg = ReframeIt::EC2::SubscriptionMessage.new(['service1'], 'response_queue1', true)
+      avail_msg = ReframeIt::EC2::AvailabilityMessage.new(['service1'], '1.2.3.4', true)
+
+      @discovery.send_message(@discovery.monitor_queue, sub_msg)
+      sleep 1
+      @discovery.send_message(@discovery.monitor_queue, avail_msg)
+      sleep 1
+      @discovery.sqs.queue('response_queue1').size.should == 1
+
+      received_msg = JSON.parse(@discovery.sqs.queue('response_queue1').pop.body)
+      received_msg.available.should be_true
+      received_msg.ipv4addr.should == '1.2.3.4'
+      received_msg.services.should == ['service1']
+    end
+  end
+
 end

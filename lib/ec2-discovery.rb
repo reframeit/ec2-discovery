@@ -61,7 +61,7 @@ module ReframeIt
               end
             end
           rescue Exception => ex
-            error "Error during post-process for message #{msg.inspect}: #{ex}"
+            error "Error during post-process for message #{msg.inspect}",  ex
           end
         end
 
@@ -82,7 +82,7 @@ module ReframeIt
               update_hosts(avail_processor)
             end
           rescue Exception => ex
-            error "Error during post-process for message #{msg.inspect}: #{ex}"
+            error "Error during post-process for message #{msg.inspect}", ex
           end            
         end
 
@@ -104,7 +104,7 @@ module ReframeIt
       def run()
         # first see if we should just exit
         if !ec2_user_data('disable', '').empty?
-          error "disable flag is set, so returning...\n\n"
+          info "disable flag is set, so returning...\n\n"
           return
         elsif !(pre_script = ec2_user_data('pre_script', '').empty?)
           info "Executing pre_script: '#{pre_script}'"
@@ -130,7 +130,7 @@ module ReframeIt
               debug { "received availability message #{msg.inspect}" }
               update_hosts(avail_proc)
             rescue Exception => ex
-              error "Error updating hosts: #{ex}"
+              error "Error updating hosts", ex
             end
           end
           listener.add_processor(avail_proc)
@@ -151,7 +151,7 @@ module ReframeIt
                 debug { "sending availability message #{avail_msg}" }
                 send_message(monitor_queue, avail_msg)
               rescue Exception => ex
-                error "Error trying to send availability message #{avail_msg.inspect}: #{ex}"
+                error "Error trying to send availability message #{avail_msg.inspect}", ex
               end
               sleep 1
             end
