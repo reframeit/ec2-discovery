@@ -20,7 +20,6 @@ module ReframeIt
         @aws_access_key_id = aws_access_key_id
         @aws_secret_access_key = aws_secret_access_key
         self.logger = logger if logger
-        puts "Set logger to #{logger.inspect}"
       end
 
       ##
@@ -298,6 +297,7 @@ module ReframeIt
         user_data_str.each_line do |line|
           line_no += 1
           line = line.strip
+          next if line =~ /^#/ # skip comments
           parts = line.split("=")
           if parts.length < 2
             warn "user-data line #{line_no} does not conform to specification: '#{line}'"
