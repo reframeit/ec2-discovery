@@ -12,6 +12,9 @@ options.provides = []
 options.aws_access_key = ''
 options.aws_secret_key = ''
 options.is_monitor = false
+options.logfile = ''
+options.loglevel = :info
+
 
 opts = OptionParser.new do |opts|
   opts.banner = "Usage: #{$0} [options]"
@@ -49,6 +52,14 @@ opts = OptionParser.new do |opts|
     options.provides = svcs
   end
 
+  opts.on("--logfile FILE", "File to write logs to. If ommitted, logs will be written to stdout") do |logfile|
+    options.logfile = logfile
+  end
+
+  opts.on("--loglevel LEVEL", "Sets the logging level", [:debug,:info,:warn,:error,:fatal]) do |loglevel|
+    options.loglevel = loglevel
+  end
+
   opts.on("-h", "--help", "Show this message") do
     puts opts
     exit 0
@@ -66,7 +77,15 @@ rescue Exception => ex
   exit 1
 end
 
-discovery = ReframeIt::EC2::Discovery.new(options.aws_access_key, options.aws_secret_key)
+if options.logfile.empty?
+  logger = ::Logger.new(STDOUT)
+else
+  logger = ::Logger.new(options.logfile)
+end
+logger.level = eval("::Logger::#{options.loglevel.to_s.upcase}")
+
+discovery = ReframeIt::EC2::Discovery.new(options.aws_access_key, options.aws_secret_key, logger)
+
 options.provides << 'monitor' if options.is_monitor && !options.provides.include?('monitor')
 discovery.subscribes = options.subscribes
 discovery.provides = options.provides

@@ -19,7 +19,8 @@ module ReframeIt
       def initialize(aws_access_key_id, aws_secret_access_key, logger = nil)
         @aws_access_key_id = aws_access_key_id
         @aws_secret_access_key = aws_secret_access_key
-        logger = logger if logger
+        self.logger = logger if logger
+        puts "Set logger to #{logger.inspect}"
       end
 
       ##
@@ -244,7 +245,7 @@ module ReframeIt
       # Our RightAws::SqsGen2 object
       ##
       def sqs
-        @sqs ||= RightAws::SqsGen2.new(@aws_access_key_id, @aws_secret_access_key, :multi_thread => true)
+        @sqs ||= RightAws::SqsGen2.new(@aws_access_key_id, @aws_secret_access_key, :multi_thread => true, :logger => logger)
         return @sqs
       end
 
