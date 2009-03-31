@@ -296,6 +296,7 @@ module ReframeIt
         user_data_str.each_line do |line|
           line_no += 1
           line = line.strip
+          next if line =~ /^#/ # skip comments
           parts = line.split("=")
           if parts.length < 2
             warn "user-data line #{line_no} does not conform to specification: '#{line}'"

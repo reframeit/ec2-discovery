@@ -36,6 +36,13 @@ describe ReframeIt::EC2::Discovery do
       h['key1'].should == 'value1'
       h['key2'].should == 'value2'
     end
+    it "shouls skip comments" do
+      h = @discovery.parse_user_data_str("key1=value1\n # here is a comment\nkey2=value2")
+      h.should_not be_empty
+      h.size.should == 2
+      h['key1'].should == 'value1'
+      h['key2'].should == 'value2'
+    end
 
     it "should skip bad lines" do
       h = @discovery.parse_user_data_str("key1=value1\nbad line here!\nkey2=value2")
