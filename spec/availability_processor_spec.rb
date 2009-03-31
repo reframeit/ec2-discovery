@@ -108,5 +108,52 @@ describe ReframeIt::EC2::AvailabilityProcessor do
     end
 
   end
+
+
+  describe "availability_changes" do
+    before(:each) do 
+      @proc = ReframeIt::EC2::AvailabilityProcessor.new
+    end
+
+    it "should be called when the availability list changes" do 
+      called = false
+      @proc.availability_changed = Proc.new do |avail_proc|
+        called = true
+      end
+
+      @proc.process(AvailabilityMessage.new(['service'], '1.2.3.4'))
+      called.should be_true
+
+      called = false
+      @proc.process(AvailabilityMessage.new(['service'], '2.3.4.5'))
+      called.should be_true
+
+      called = false
+      @proc.process(AvailabilityMessage.new(['service_b'], '1.2.3.4'))
+      called.should be_true
+
+      called = false
+      @proc.process(AvailabilityMessage.new(['service'], '1.2.3.4', false))
+      called.should be_true
+    end
+
+    it "should not be called when the availability list does not change" do
+
+      @proc.process(AvailabilityMessage.new(['service_a', 'service_b'], '1.2.3.4'))
+      @proc.process(AvailabilityMessage.new(['service_c'], '1.2.3.4'))
+
+      called = false
+      @proc.availability_changed = Proc.new do |avail_proc|
+        called = true
+      end
+
+      @proc.process(AvailabilityMessage.new(['service_a'], '1.2.3.4'))
+      called.should be_false
+
+      @proc.process(AvailabilityMessage.new(['service_b', 'service_c'], '1.2.3.4'))
+      called.should be_false
+    end
+  end
+
 end
 

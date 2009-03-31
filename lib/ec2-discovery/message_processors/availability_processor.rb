@@ -8,6 +8,13 @@ module ReframeIt
     # This processor keeps track of service availabilities
     ##
     class AvailabilityProcessor < MessageProcessor
+
+      ##
+      # a block that is passed this processor as a param and is
+      # called when the availability list changes
+      ##
+      attr_accessor :availability_changed
+
       ##
       # Only the monitor should keep track of services expiring. That
       # way, the monitor can go down, and current services will maintain
@@ -23,25 +30,46 @@ module ReframeIt
         
         # hash of service name => Hash<ipv4 address => expiration time>
         @expires = {} if @keep_track_of_expires
+
+        # block called when our list changes
+        @availability_changed = nil
       end
 
       def process_impl(msg)
+        changed = false
+
         if msg.available
           msg.services.each do |service|
             @available[service] ||= []
-            @available[service] << msg.ipv4addr if !@available[service].include?(msg.ipv4addr)
+            if !@available[service].include?(msg.ipv4addr)
+              @available[service] << msg.ipv4addr
+              changed = true
+            end
             if @keep_track_of_expires
               @expires[service] ||= {}
               @expires[service][msg.ipv4addr] = Time.now + msg.ttl
             end
           end
-        else
+        else # unavailability message
           msg.services.each do |service|
-            @available[service].delete(msg.ipv4addr) if @available[service]
+            if @available[service]
+              @available[service].delete(msg.ipv4addr)
+              changed = true
+            end
             
             if @keep_track_of_expires
               @expires[service].delete(msg.ipv4addr) if @expires[service]
             end
+          end
+        end
+
+        # if we have an availability_changed listener, let them know
+        # that our list has changed.
+        if changed && @availability_changed
+          begin
+            @availability_changed.call(self)
+          rescue Exception => ex
+            error "Exception while executing availability_changed block!", ex
           end
         end
       end

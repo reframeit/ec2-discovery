@@ -6,6 +6,7 @@ require 'ec2-discovery/queue_listener'
 require 'ec2-discovery/message_processor'
 require 'ec2-discovery/message_processors/availability_processor'
 require 'ec2-discovery/message_processors/subscription_processor'
+require 'ec2-discovery/action'
 
 module ReframeIt
   module EC2
@@ -20,7 +21,6 @@ module ReframeIt
         @aws_access_key_id = aws_access_key_id
         @aws_secret_access_key = aws_secret_access_key
         self.logger = logger if logger
-        puts "Set logger to #{logger.inspect}"
       end
 
       ##
@@ -67,23 +67,23 @@ module ReframeIt
         end
 
         # add a post-processor to let any subscribers know of
-        # changes in availability,
-        # and also update our own hosts file
+        # updates to availability, even keep-alives.
         avail_processor.post_process = Proc.new do |msg|
           debug { "received availability message #{msg.inspect}" }
           begin
             msg.services.each do |service|
               sub_processor.response_queues(service).each do |response_queue|
-                debug { "sending availability message #{msg.inspect}" }
-                send_message(sqs.queue(response_queue), msg)
+                # original message may have included more services 
+                # than what the subscriber is interested in
+                avail_msg = AvailabilityMessage.new([service], msg.ipv4addr, msg.available, msg.ttl)
+                debug { "sending availability message #{avail_msg.inspect}" }
+                send_message(sqs.queue(response_queue), avail_msg)
               end
-              update_hosts(avail_processor)
             end
           rescue Exception => ex
             error "Error during post-process for message #{msg.inspect}", ex
-          end            
+          end
         end
-
 
         # TODO: allow control over this thread
         unavail_thread = Thread.new do
@@ -111,8 +111,8 @@ module ReframeIt
 
       ##
       # Subscribe to the services we're interested in, and listen for
-      # any changes in availability for those services, updating our
-      # hosts when necessary.
+      # any changes in availability for those services, calling any 
+      # necessary actions when this occurs.
       #
       # == Params:
       # +subscribes+ - array of services we are subscribing to
@@ -129,12 +129,14 @@ module ReframeIt
         queue = sqs.queue(queue_name)
         listener = QueueListener.new(queue)
         avail_proc = AvailabilityProcessor.new
-        avail_proc.post_process = Proc.new do |msg|
-          begin
-            debug { "received availability message #{msg.inspect}" }
-            update_hosts(avail_proc)
-          rescue Exception => ex
-            error "Error updating hosts", ex
+        avail_proc.availability_changed = Proc.new do |msg|
+          debug { "received availability message #{msg.inspect}" }
+          actions.each do |action|
+            begin
+              action.invoke(avail_proc)
+            rescue Exception => ex
+              error "Error calling action #{action.inspect} with #{avail_proc.inspect}", ex
+            end
           end
         end
         listener.add_processor(avail_proc)
@@ -198,9 +200,9 @@ module ReframeIt
       # Runs a pub/sub client. If one of the services listed is
       # 'monitor', then we launch a monitor as well.
       #
-      # Currently, this script updates /etc/resolv.conf every few seconds
-      # with the latest ip addresses of the named services that the client
-      # is interested in (or everything if it is a monitor).
+      # If using the UpdateHosts action, then this script will update
+      # /etc/hosts every few seconds with the latest ip address
+      # of the named services that the client is interested in.
       # Multiple addresses for the same service will have the service names
       # appended with 00-99
       ##
@@ -217,16 +219,12 @@ module ReframeIt
         is_monitor = provides.include?('monitor')
         
         if is_monitor
-          listener_thread = monitor()
-
-          # no need to subscribe to specific services
-          # because we'll see all the availability messages anyway
-          
-          # TODO: when we implement distributed monitoring, we will have
-          # to specifically subscribe to services
-        else
-          listener_thread = subscribe(subscribes, instance_id, 10)
+          monitor_thread = monitor()
+          ## TODO: don't just leave this thread dangling, 
+          ## do something if it crashes!
         end
+        
+        listener_thread = subscribe(subscribes, instance_id, 10)
 
         # even if we're a monitor, we may provide some other services as well.
         avail_thread = broadcast_availability(provides, 3)
@@ -427,6 +425,64 @@ module ReframeIt
       end
 
       ##
+      # the user-defined actions that this instance should take when its host
+      # list is updated,
+      # as read from the ec2 user-data
+      #
+      # Returns: array of strings
+      ##
+      def action_strs
+        if !@action_strs
+          @action_strs = ec2_user_data('action')
+          if !@action_strs || @action_strs.empty?
+            @action_strs = []
+          elsif !@action_strs.is_a?(Array)
+            @action_strs = [@action_strs]
+          end
+        end
+
+        @action_strs
+      end
+      
+
+      ##
+      # The action objects that should be invoked when the list of available
+      # services that we care about changes.
+      #
+      # 
+      # The first time this is called, it tries to evaluate the +action_strs+ 
+      # strings by calling eval on each of them in order to get the desired object.
+      # So an action_str could be, for example, 
+      # "ReframeIt::EC2::UpdateHosts.new('127.0.0.1', 'local_name')"
+      #
+      ##
+      def actions
+        if !@actions
+          # make sure we've loaded all the actions we know about
+          Dir.glob(File.join(File.dirname(__FILE__), 'actions', '*.rb')).each do |file|
+            require file
+          end
+
+          @actions = []
+          action_strs.each do |action_str|
+            begin
+              action = eval(action_str)
+              if action.is_a?(ReframeIt::EC2::Action)
+                @actions << action
+              else
+                error "Actions must inherit from ReframeIt::EC2::Action, but #{action.inspect} does not!"
+              end
+            rescue Exception => ex
+              error "Error trying to eval #{action_str}", ex
+            end
+          end
+        end
+
+        @actions
+      end
+
+
+      ##
       # manually set the list of services provided by this instance, 
       # rather than having to look in the ec2 user-data
       ##
@@ -445,6 +501,17 @@ module ReframeIt
         @subscribes = services
         if !@subscribes.is_a?(Array)
           @subscribes = [@subscribes]
+        end
+      end
+
+      ##
+      # manually set the list of actions this instance should take,
+      # rather than having to look in the ec2 user-data
+      ##
+      def action_strs=(actions)
+        @action_strs = actions
+        if !@action_strs.is_a?(Array)
+          @action_strs = [@action_strs]
         end
       end
 
@@ -487,61 +554,6 @@ module ReframeIt
       ##
       def send_message(queue, msg)
         queue.send_message(msg.to_json)
-      end
-
-      ##
-      # update the system's hosts file according to the known 
-      # availabilities in the given ReframeIt::EC2::AvailabilityProcessor
-      #
-      # host names will be the service name, followed by two digits (01-99)
-      #
-      # == WARNING ==
-      # This is a potentially dangerous operation. It reads the file on
-      # disk, removes any section between "## BEGIN ec2-discovery ##" and 
-      # "## END ec2-discovery ##", then constantly updates the file (re-reading each time
-      # to mitigate corruption risk).
-      ##
-      def update_hosts(availability_processor)
-        debug { "updating hosts..." }
-
-        marker_begin = "## BEGIN ec2-discovery ##"
-        marker_end = "## END ec2-discovery ##"
-
-        lines = []
-
-        # read the file, stripping out a discovery section if we find one
-        stripping = false
-        File.readlines("/etc/hosts").each do |line|
-          if !stripping && line =~ /^\s*#{marker_begin}/
-              stripping = true
-          elsif stripping && line =~ /^\s*#{marker_end}/
-              stripping = false
-          else
-            # TODO: what if one of these ip addresses gets reused later?
-            # for now, just ignoring them
-            lines << line.strip if !stripping
-          end
-        end
-
-        lines << "#{marker_begin}"
-        # add the currently available ip addresses and services
-        all_ips = availability_processor.all_ipv4addrs(true)
-
-        # add an alias for our local internal address
-        all_ips[local_ipv4] ||= []
-        all_ips[local_ipv4] << local_name
-
-        # add an alias for our external address
-        all_ips[public_ipv4] ||= []
-        all_ips[public_ipv4] << public_name
-
-        all_ips.each do |ip, service_list|
-          lines << "#{ip} #{service_list.join(' ')}"
-        end
-        lines << "#{marker_end}\n"
-        
-        File.open("/etc/hosts", 'w') {|f| f.write(lines.join("\n"))}
-        debug { "Updated hosts" }
       end
 
     end

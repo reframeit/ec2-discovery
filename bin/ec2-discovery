@@ -9,6 +9,11 @@ require 'ec2-discovery'
 options = OpenStruct.new
 options.subscribes = []
 options.provides = []
+options.actions = []
+options.has_subscribes = false
+options.has_provides = false
+options.has_actions = false
+
 options.aws_access_key = ''
 options.aws_secret_key = ''
 options.is_monitor = false
@@ -45,11 +50,19 @@ opts = OptionParser.new do |opts|
   opts.on("-S", "--subscribes svc1,svc2,svc3", Array,
           "Specifies which services this instance should subscribe to. This overrides the 'subscribe' user-data passed in when the ec2 instance was launched.") do |svcs|
     options.subscribes = svcs
+    options.has_subscribes = true
   end
 
   opts.on("-P", "--provides svc1,svc2,svc3", Array,
           "Specifies which services this instance provides. This overrides the 'provide' user-data passed in when the ec2 instance was launched.") do |svcs|
     options.provides = svcs
+    options.has_provides = true
+  end
+
+  opts.on("-A", "--actions act1,act2,act3", Array,
+          "Specifies which actions this instance should take when its list of hosts is updated.") do |actions|
+    options.actions = actions
+    options.has_actions = true
   end
 
   opts.on("--logfile FILE", "File to write logs to. If ommitted, logs will be written to stdout") do |logfile|
@@ -87,7 +100,8 @@ logger.level = eval("::Logger::#{options.loglevel.to_s.upcase}")
 discovery = ReframeIt::EC2::Discovery.new(options.aws_access_key, options.aws_secret_key, logger)
 
 options.provides << 'monitor' if options.is_monitor && !options.provides.include?('monitor')
-discovery.subscribes = options.subscribes
-discovery.provides = options.provides
+discovery.subscribes = options.subscribes if options.has_subscribes
+discovery.provides = options.provides if options.has_provides || options.is_monitor
+discovery.action_strs = options.actions if options.has_actions
 
 discovery.run

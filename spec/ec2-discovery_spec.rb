@@ -78,7 +78,6 @@ describe ReframeIt::EC2::Discovery do
 
   describe "monitor" do
     it "should receive existing subscription messages" do
-      @discovery.should_not_receive(:update_hosts)
       msg = ReframeIt::EC2::SubscriptionMessage.new(['service1'], 'response_queue1', true)
       @discovery.send_message(@discovery.monitor_queue, msg)
       @discovery.monitor_queue.size.should == 1
@@ -88,7 +87,6 @@ describe ReframeIt::EC2::Discovery do
     end
 
     it "should receive existing availability messages" do
-      @discovery.should_receive(:update_hosts).once
       msg = ReframeIt::EC2::AvailabilityMessage.new(['service1'], '1.2.3.4', true)
       @discovery.send_message(@discovery.monitor_queue, msg)
       @discovery.monitor_queue.size.should == 1
@@ -98,7 +96,6 @@ describe ReframeIt::EC2::Discovery do
     end
 
     it "should receive new subscription messages" do
-      @discovery.should_not_receive(:update_hosts)
       monitor_thread = @discovery.monitor
       sleep 1
       msg = ReframeIt::EC2::SubscriptionMessage.new(['service1'], 'response_queue1', true)
@@ -109,7 +106,6 @@ describe ReframeIt::EC2::Discovery do
     end
 
     it "should receive new availability messages" do
-      @discovery.should_receive(:update_hosts).once
       monitor_thread = @discovery.monitor
       sleep 1
 
@@ -121,7 +117,6 @@ describe ReframeIt::EC2::Discovery do
     end
 
     it "should send availability messages to interested subscribers" do
-      @discovery.stub!(:update_hosts)
       @discovery.stub!(:local_ipv4).and_return('1.2.3.4')
       monitor_thread = @discovery.monitor
       sleep 1
@@ -141,7 +136,6 @@ describe ReframeIt::EC2::Discovery do
     end
 
     it "should send an unavailable message to interested subscribers when a service is no longer available" do
-      @discovery.stub!(:update_hosts)
       @discovery.stub!(:local_ipv4).and_return('1.2.3.4')
       monitor_thread = @discovery.monitor
       sleep 1
@@ -173,27 +167,31 @@ describe ReframeIt::EC2::Discovery do
       discovery1.stub!(:subscribes).and_return([])
 
       discovery2.stub!(:provides).and_return(['service_b'])
-      discovery2.stub!(:subscribes).and_return(['service_b'])
+      discovery2.stub!(:subscribes).and_return(['service_a'])
 
       discovery1.stub!(:local_ipv4).and_return('1.1.1.1')
       discovery2.stub!(:local_ipv4).and_return('2.2.2.2')
+      discovery1.stub!(:instance_id).and_return('discovery1')
       discovery2.stub!(:instance_id).and_return('discovery2')
 
-      discovery1.should_receive(:update_hosts).at_least(:once) { |avail_proc|
-        all_ips = avail_proc.all_ipv4addrs(true)
-        all_ips.has_key?('1.1.1.1').should be_true
-        all_ips.has_key?('2.2.2.2').should be_true
-        all_ips['1.1.1.1'].include?('monitor01').should be_true
-        all_ips['1.1.1.1'].include?('service_a01').should be_true
-        all_ips['2.2.2.2'].include?('service_b01').should be_true
-      }
-      
-      discovery2.should_receive(:update_hosts).at_least(:once) { |avail_proc|
-        all_ips = avail_proc.all_ipv4addrs(true)
-        all_ips.has_key?('1.1.1.1').should be_true
-        all_ips.has_key?('2.2.2.2').should be_false # we're not subscribing to our own services
-        all_ips['1.1.1.1'].should == ['service_a01']
-      }
+      discovery1_action_called = false
+      # discovery1 shouldn't have its actions called at all,
+      # because it doesn't subscribe to anything.
+      #
+      # we can tell that discovery1 knows about all the serviecs, however, because
+      # it sends the availability messages to discovery2
+      discovery1.actions << ReframeIt::EC2::Action.new do |avail_proc|
+        # if we got here, it's an error
+        discovery1_action_called = true
+      end
+
+      discovery2_action_called = false
+      # we'll save them on the last time this method is called
+      discovery2_ips = {}
+      discovery2.actions << ReframeIt::EC2::Action.new do |avail_proc|
+        discovery2_action_called = true
+        discovery2_ips = avail_proc.all_ipv4addrs(true)
+      end
       
       thread1 = Thread.new do
         discovery1.run
@@ -205,7 +203,13 @@ describe ReframeIt::EC2::Discovery do
 
       sleep 5
       thread1.kill
-      thread2.kill      
+      thread2.kill
+
+      discovery1_action_called.should be_false
+      discovery2_action_called.should be_true
+      discovery2_ips.has_key?('1.1.1.1').should be_true
+      discovery2_ips.has_key?('2.2.2.2').should be_false # we're not subscribing to our own services
+      discovery2_ips['1.1.1.1'].should == ['service_a01']
     end
   end
 
