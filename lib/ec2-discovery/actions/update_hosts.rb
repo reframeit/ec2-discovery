@@ -2,6 +2,12 @@ require 'ec2-discovery/action'
 
 module ReframeIt
   module EC2
+
+    ##
+    # This action updates our /etc/hosts file, using service names as host names
+    # (where each service is appended with a 2-digit incrementing number to create the
+    #  hostnames)
+    ##
     class UpdateHosts < Action
       def initialize(local_ipv4 = '127.0.0.1', local_name = 'local_name', public_ipv4 = '0.0.0.0', public_name = 'public_name')
         @local_ipv4 = local_ipv4
