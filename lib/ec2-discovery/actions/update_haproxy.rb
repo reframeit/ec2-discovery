@@ -33,7 +33,7 @@ module ReframeIt
 
       ## returns the lines of the file, as an array
       def read_config_file
-        contents File.readlines(@config_file)
+        contents = File.readlines(@config_file)
 
         # add a blank line at the end (sentinal)
         contents << "\n"

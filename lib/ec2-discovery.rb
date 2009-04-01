@@ -211,10 +211,9 @@ module ReframeIt
         if !ec2_user_data('disable', '').empty?
           info "disable flag is set, so returning...\n\n"
           return
-        elsif !(pre_script = ec2_user_data('pre_script', '').empty?)
-          info "Executing pre_script: '#{pre_script}'"
-          info `pre_script`
         end
+
+        run_pre_scripts
 
         is_monitor = provides.include?('monitor')
         
@@ -230,15 +229,32 @@ module ReframeIt
         avail_thread = broadcast_availability(provides, 3)
 
         sleep 3
-        if !(post_script = ec2_user_data('post_script', '').empty?)
-          info "Executing post_script: '#{post_script}'"
-          info `post_script`
-        end
+        run_post_scripts
 
         # keep listening...
         listener_thread.join
       end
 
+      ##
+      # executes any pre_script scripts passed in via user-data
+      ##
+      def run_pre_scripts
+        pre_scripts.each do |script|
+          info "Executing pre_script: #{pre_script}"
+          info `#{pre_script}`
+        end
+      end
+
+      ##
+      # executes any post_script scripts passed in via user-data
+      ##
+      def run_post_scripts
+        post_scripts.each do |script|
+          info "Executing post_script: #{post_script}"
+          info `#{post_script}`
+        end
+      end
+      
       ##
       # Our RightAws::SqsGen2 object
       ##
@@ -394,15 +410,7 @@ module ReframeIt
       # Returns: array of strings
       ##
       def provides
-        if !@provides
-          @provides = ec2_user_data('provide')
-          if !@provides || @provides.empty?
-            @provides = []
-          elsif !@provides.is_a?(Array)
-            @provides = [@provides]
-          end
-        end
-
+        @provides ||= user_data_as_array('provide')
         @provides
       end
 
@@ -413,15 +421,7 @@ module ReframeIt
       # Returns: array of strings
       ##
       def subscribes
-        if !@subscribes
-          @subscribes = ec2_user_data('subscribe')
-          if !@subscribes || @subscribes.empty?
-            @subscribes = []
-          elsif !@subscribes.is_a?(Array)
-            @subscribes = [@subscribes]
-          end
-        end
-
+        @subscribes ||= user_data_as_array('subscribe')
         @subscribes
       end
 
@@ -433,16 +433,45 @@ module ReframeIt
       # Returns: array of strings
       ##
       def action_strs
-        if !@action_strs
-          @action_strs = ec2_user_data('action')
-          if !@action_strs || @action_strs.empty?
-            @action_strs = []
-          elsif !@action_strs.is_a?(Array)
-            @action_strs = [@action_strs]
-          end
+        @action_strs ||= user_data_as_array('action')
+        @action_strs
+      end
+
+      ##
+      # the user-defined pre-scripts to execute before any discovery takes place,
+      # as read from the ec2-user-data
+      #
+      # Returns: array of strings
+      ##
+      def pre_scripts
+        @pre_scripts ||= user_data_as_array('pre_script')
+        @pre_scripts
+      end
+
+      ##
+      # the user-defined post-scripts to execute after the discovery has begun,
+      # as read from the ec2-user-data
+      #
+      # Returns: array of strings
+      ##
+      def post_scripts
+        @post_scripts ||= user_data_as_array('post_script')
+        @post_scripts
+      end
+
+      ##
+      # This wraps the fetching of a user-data param, and ensures
+      # that the result is an (possibly empty) array
+      ##
+      def user_data_as_array(key)
+        val = ec2_user_data(key)
+        if !val || val.empty?
+          val = []
+        elsif !val.is_a?(Array)
+          val = [val]
         end
 
-        @action_strs
+        val
       end
       
 
