@@ -506,6 +506,7 @@ module ReframeIt
               action = eval(action_str)
               if action.is_a?(ReframeIt::EC2::Action)
                 @actions << action
+                info { "Loaded action #{action.inspect}" }
               else
                 error "Actions must inherit from ReframeIt::EC2::Action, but #{action.inspect} does not!"
               end
