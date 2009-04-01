@@ -49,6 +49,7 @@ module ReframeIt
         sub_processor.post_process = Proc.new do |msg|
           begin
             if msg.subscribe
+              info { "received subscription from #{msg.response_queue} for #{msg.services.inspect}" }
               debug { "got subscription #{msg.inspect}" }
               queue = sqs.queue(msg.response_queue)
               msg.services.each do |service|
@@ -89,6 +90,7 @@ module ReframeIt
         unavail_thread = Thread.new do
           while true
             avail_processor.expired.each do |service, ip_list|
+              info { "#{service} on #{ip_list.inspect} expired" }
               sub_processor.response_queues(service).each do |response_queue|
                 ip_list.each do |ip|
                   msg = AvailabilityMessage.new([service], ip, false, -1)
@@ -129,13 +131,14 @@ module ReframeIt
         queue = sqs.queue(queue_name)
         listener = QueueListener.new(queue)
         avail_proc = AvailabilityProcessor.new
-        avail_proc.availability_changed = Proc.new do |msg|
-          debug { "received availability message #{msg.inspect}" }
+        avail_proc.availability_changed = Proc.new do |availability_processor|
+          info { "Availability Changed! New list is:\n #{availability_processor.all_ipv4addrs.inspect}" }
+          debug { "received availability message #{availability_processor}" }
           actions.each do |action|
             begin
-              action.invoke(avail_proc)
+              action.invoke(availability_processor)
             rescue Exception => ex
-              error "Error calling action #{action.inspect} with #{avail_proc.inspect}", ex
+              error "Error calling action #{action.inspect} with #{availability_processor.inspect}", ex
             end
           end
         end
