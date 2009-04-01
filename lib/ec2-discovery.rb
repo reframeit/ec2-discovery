@@ -313,6 +313,7 @@ module ReframeIt
           line_no += 1
           line = line.strip
           next if line =~ /^#/ # skip comments
+          next if line.empty? # skip blank lines
           parts = line.split("=")
           if parts.length < 2
             warn "user-data line #{line_no} does not conform to specification: '#{line}'"
