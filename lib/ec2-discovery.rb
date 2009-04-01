@@ -322,7 +322,7 @@ module ReframeIt
             warn "user-data line #{line_no} does not conform to specification: '#{line}'"
           else
             key = parts.first
-            value = parts[1..-1].join('') # in case there was an '=' in the value
+            value = parts[1..-1].join('=') # in case there was an '=' in the value
             # already have a value, so make sure we have an array
             if user_data[key]
               if !user_data[key].is_a?(Array)

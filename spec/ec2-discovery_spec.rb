@@ -62,6 +62,13 @@ describe ReframeIt::EC2::Discovery do
       h['key1'].last.should == 'value1b'
       h['key2'].should == 'value2'
     end
+
+    it "should keep subsequent equals signs" do
+      h = @discovery.parse_user_data_str("key1=value1a=value1b=5")
+      h.should_not be_empty
+      h.size.should == 1
+      h['key1'].should == "value1a=value1b=5"
+    end
   end
 
   # tests the logic that calls the string parsing
