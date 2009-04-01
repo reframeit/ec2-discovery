@@ -1,4 +1,5 @@
 require 'ec2-discovery/action'
+require 'ec2-discovery/message_processors/availability_processor'
 
 module ReframeIt
   module EC2
@@ -7,13 +8,20 @@ module ReframeIt
     # This action updates our /etc/hosts file, using service names as host names
     # (where each service is appended with a 2-digit incrementing number to create the
     #  hostnames)
+    #
+    # +update_immediately+ - if true, we right to the hosts file as soon as we are
+    #                        initialized, in order to write any local settings
     ##
     class UpdateHosts < Action
-      def initialize(local_ipv4 = '127.0.0.1', local_name = 'local_name', public_ipv4 = '0.0.0.0', public_name = 'public_name')
+      def initialize(local_ipv4 = '127.0.0.1', local_name = 'local_name', public_ipv4 = '0.0.0.0', public_name = 'public_name', update_immediately = true)
         @local_ipv4 = local_ipv4
         @local_name = local_name
         @public_ipv4 = public_ipv4
         @public_name = public_name
+
+        # we should update our hosts right away, so we can get any 
+        # local settings in there at least
+        self.invoke(AvailabilityProcessor.new) if update_immediately
       end
 
       def invoke(availability_processor)
