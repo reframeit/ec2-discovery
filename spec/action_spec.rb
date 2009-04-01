@@ -29,7 +29,7 @@ describe ReframeIt::EC2::UpdateHosts do
     discovery2.should_receive(:public_name).and_return('discovery2_public')
     
     discovery2.actions.first.class.should == ReframeIt::EC2::UpdateHosts
-    discovery2.actions.first.should_receive(:invoke).at_least(:once)
+    discovery2.actions.first.should_receive(:invoke).at_least(:once).and_return(nil)
     
     thread1 = Thread.new do
       discovery1.run

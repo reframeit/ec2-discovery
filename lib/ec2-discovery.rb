@@ -121,12 +121,14 @@ module ReframeIt
       # +queue_name+ - the name of the aws queue we wish to listen on
       # +subscribe_interval+ - how often we should send a subscription message
       #
-      # Returns: (running) subscription thread
+      # Returns: (running) subscription thread or nil if none was needed
       #
       # TODO: provide a way to stop the subscription thread
       # FIXME: we just leave the listener thread dangling here
       ##
       def subscribe(subscribes = [], queue_name = nil, subscribe_interval=10)
+        return nil if subscribes.empty?
+
         # start listening on our queue
         queue = sqs.queue(queue_name)
         listener = QueueListener.new(queue)
@@ -235,7 +237,8 @@ module ReframeIt
         run_post_scripts
 
         # keep listening...
-        listener_thread.join
+        listener_thread.join if listener_thread
+        avail_thread.join if avail_thread
       end
 
       ##

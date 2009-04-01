@@ -115,7 +115,7 @@ describe ReframeIt::EC2::Discovery do
       msg = ReframeIt::EC2::SubscriptionMessage.new(['service1'], 'response_queue1', true)
       @discovery.send_message(@discovery.monitor_queue, msg)
       @discovery.monitor_queue.size.should == 1
-      sleep 1
+      sleep 5
       @discovery.monitor_queue.size.should == 0
     end
 
