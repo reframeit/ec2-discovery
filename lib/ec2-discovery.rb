@@ -240,8 +240,8 @@ module ReframeIt
       ##
       def run_pre_scripts
         pre_scripts.each do |script|
-          info "Executing pre_script: #{pre_script}"
-          info `#{pre_script}`
+          info "Executing pre_script: #{script}"
+          info `#{script}`
         end
       end
 
@@ -250,8 +250,8 @@ module ReframeIt
       ##
       def run_post_scripts
         post_scripts.each do |script|
-          info "Executing post_script: #{post_script}"
-          info `#{post_script}`
+          info "Executing post_script: #{script}"
+          info `#{script}`
         end
       end
       
