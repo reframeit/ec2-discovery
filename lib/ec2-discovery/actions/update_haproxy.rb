@@ -41,7 +41,7 @@ module ReframeIt
 
       ## writes the given string to the config file
       def write_config_file(doc)
-        File.open(@config_file, 'w') {|f| f.write(lines.join("\n"))}
+        File.open(@config_file, 'w') {|f| f.write(doc)}
       end
 
       ## reloads the latest haproxy config

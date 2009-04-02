@@ -52,11 +52,19 @@ module ReframeIt
 
         # add an alias for our local internal address
         all_ips[@local_ipv4] ||= []
-        all_ips[@local_ipv4] << @local_name
+        if @local_name.is_a?(Array)
+          all_ips[@local_ipv4] |= @local_name
+        else
+          all_ips[@local_ipv4] << @local_name
+        end
 
         # add an alias for our external address
         all_ips[@public_ipv4] ||= []
-        all_ips[@public_ipv4] << @public_name
+        if @public_name.is_a?(Array)
+          all_ips[@public_ipv4] |= @public_name
+        else
+          all_ips[@public_ipv4] << @public_name
+        end
 
         all_ips.each do |ip, service_list|
           lines << "#{ip} #{service_list.join(' ')}"
