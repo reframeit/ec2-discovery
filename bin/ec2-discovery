@@ -105,7 +105,8 @@ discovery.provides = options.provides if options.has_provides || options.is_moni
 discovery.action_strs = options.actions if options.has_actions
 
 begin
-  discovery.run
+  #discovery.run
+  discovery.actions
 rescue Exception => ex
   logger.fatal ex
 end

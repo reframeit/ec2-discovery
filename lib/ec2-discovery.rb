@@ -250,6 +250,15 @@ module ReframeIt
       # executes any pre_script scripts passed in via user-data
       ##
       def run_pre_scripts
+        pre_ruby_scripts.each do |script|
+          begin
+            info "Executing pre_ruby_script: #{script}"
+            eval(script)
+          rescue Exception => ex
+            error "Error executing pre_ruby_script: #{script}", ex
+          end
+        end
+
         pre_scripts.each do |script|
           info "Executing pre_script: #{script}"
           info `#{script}`
@@ -263,6 +272,15 @@ module ReframeIt
         post_scripts.each do |script|
           info "Executing post_script: #{script}"
           info `#{script}`
+        end
+
+        post_ruby_scripts.each do |script|
+          begin
+            info "Executing post_ruby_script: #{script}"
+            eval(script)
+          rescue Exception => ex
+            error "Error executing post_ruby_script: #{script}", ex
+          end
         end
       end
       
@@ -368,6 +386,12 @@ module ReframeIt
       #              any pub/sub takes place
       # post_script - a standard bash script that should be executed after
       #               the discovery has started
+      # pre_ruby_script - like pre_script, but this gets eval'd as ruby code, so it 
+      #                   can do things like call ReframeIt::EC2::Discovery methods (it has access to self).
+      #                   These are eval'd before the pre_scripts.
+      # post_ruby_script - like post_script, but this gets eval'd as ruby code, so it 
+      #                    can do things like call ReframeIt::EC2::Discovery methods (it has access to self).
+      #                    These are eval'd after the post_scripts.
       # disable - if this key is present (the value doesn't matter), then
       #           no pub/sub will take place
       # local_name - a hostname to assign to the local ipv4 address.
@@ -472,6 +496,22 @@ module ReframeIt
       end
 
       ##
+      # just like pre_scripts, except ruby code that should be eval'd
+      ##
+      def pre_ruby_scripts
+        @pre_ruby_scripts ||= user_data_as_array('pre_ruby_script')
+        @pre_ruby_scripts
+      end
+
+      ##
+      # just like post_scripts, except ruby code that should be eval'd
+      ##
+      def post_ruby_scripts
+        @post_ruby_scripts ||= user_data_as_array('post_ruby_script')
+        @post_ruby_scripts
+      end
+
+      ##
       # This wraps the fetching of a user-data param, and ensures
       # that the result is an (possibly empty) array
       ##
@@ -501,8 +541,10 @@ module ReframeIt
       def actions
         if !@actions
           # make sure we've loaded all the actions we know about
-          Dir.glob(File.join(File.dirname(__FILE__), 'actions', '*.rb')).each do |file|
-            require file
+          Dir.glob(File.join(File.dirname(__FILE__), 'ec2-discovery', 'actions', '*.rb')).each do |file|
+            req_name = "ec2-discovery/actions/#{File.basename(file).gsub(/\.rb^/, '')}"
+            info "Requiring #{req_name}"
+            require req_name
           end
 
           @actions = []
