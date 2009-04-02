@@ -602,6 +602,8 @@ module ReframeIt
 
       ##
       # the user-data supplied name for the internal ipv4 address
+      #
+      # may be a string or an array of strings
       ##
       def local_name
         ec2_user_data('local_name', 'local_name')
@@ -609,6 +611,8 @@ module ReframeIt
 
       ##
       # the user-data supplied name for the external ipv4 address
+      #
+      # may be a string or an array of strings
       ##
       def public_name
         ec2_user_data('public_name', 'public_name')
