@@ -222,6 +222,11 @@ module ReframeIt
 
         is_monitor = provides.include?('monitor')
         
+        # evaluate our actions
+        # this is important as it can both notify us of errors early on,
+        # and it also allows the actions to perform any initialization code
+        actions
+
         if is_monitor
           monitor_thread = monitor()
           ## TODO: don't just leave this thread dangling, 
