@@ -1,5 +1,6 @@
 require 'ec2-discovery/action'
 require 'ec2-discovery/message_processors/availability_processor'
+require 'ec2-discovery/service_address'
 
 module ReframeIt
   module EC2
@@ -13,11 +14,20 @@ module ReframeIt
     #                        initialized, in order to write any local settings
     ##
     class UpdateHosts < Action
+
+      # set to true for testing, false otherwise
+      attr_accessor :pretend
+      
+      # when testing, this is what we would have last written
+      attr_accessor :pretend_output
+
       def initialize(local_ipv4 = '127.0.0.1', local_name = 'local_name', public_ipv4 = '0.0.0.0', public_name = 'public_name', update_immediately = true)
         @local_ipv4 = local_ipv4
         @local_name = local_name
         @public_ipv4 = public_ipv4
         @public_name = public_name
+
+        @pretend = false
 
         # we should update our hosts right away, so we can get any 
         # local settings in there at least
@@ -48,7 +58,7 @@ module ReframeIt
 
         lines << "#{marker_begin}"
         # add the currently available ip addresses and services
-        all_ips = availability_processor.all_ipv4addrs(true)
+        all_ips = availability_processor.all_available(true, false)
 
         # add an alias for our local internal address
         all_ips[@local_ipv4] ||= []
@@ -70,8 +80,14 @@ module ReframeIt
           lines << "#{ip} #{service_list.join(' ')}"
         end
         lines << "#{marker_end}\n"
-        
-        File.open("/etc/hosts", 'w') {|f| f.write(lines.join("\n"))}
+
+        if @pretend
+          info "In pretend mode, so not writing /etc/hosts"
+          debug { "I would have written:\n#{lines.join("\n")}" }
+          @pretend_output = lines.join("\n")
+        else
+          File.open("/etc/hosts", 'w') {|f| f.write(lines.join("\n"))}
+        end
         debug { "Updated hosts" }        
       end
     end

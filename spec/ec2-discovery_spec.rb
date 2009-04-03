@@ -204,7 +204,7 @@ describe ReframeIt::EC2::Discovery do
       discovery2_ips = {}
       discovery2.actions << ReframeIt::EC2::Action.new do |avail_proc|
         discovery2_action_called = true
-        discovery2_ips = avail_proc.all_ipv4addrs(true)
+        discovery2_ips = avail_proc.all_available(true)
       end
       
       thread1 = Thread.new do

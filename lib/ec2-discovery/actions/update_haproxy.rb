@@ -11,6 +11,21 @@ module ReframeIt
     # and then reload haproxy, using the reload command.
     ## 
     class UpdateHAProxy < Action
+      
+      # for testing only
+      attr_accessor :pretend
+
+      # the last output we would have written, when in pretend mode
+      attr_accessor :pretend_output
+
+      # the number of times we would have reloaded (only valid in pretend mode)
+      attr_accessor :pretend_reloads
+
+      # lets us quickly mock up an input file
+      # yes, I recognize that this is not the best way to go about mocking a method,
+      # but for some reason or another, mocking methods from the tests doesn't always work
+      # (I think this is because it is being called in a separate thread or inside a Proc)
+      attr_accessor :pretend_input
 
       ##
       # Initialize a new updater.
@@ -29,11 +44,17 @@ module ReframeIt
         @config_file = config_file
         @reload_cmd = reload_cmd
         @extra_server_args = extra_server_args
+        @pretend = false
+        @pretend_reloads = 0
       end
 
       ## returns the lines of the file, as an array
       def read_config_file
-        contents = File.readlines(@config_file)
+        if @pretend
+          contents = @pretend_input || []
+        else
+          contents = File.readlines(@config_file)
+        end
 
         # add a blank line at the end (sentinal)
         contents << "\n"
@@ -41,13 +62,24 @@ module ReframeIt
 
       ## writes the given string to the config file
       def write_config_file(doc)
-        File.open(@config_file, 'w') {|f| f.write(doc)}
+        if @pretend
+          info "In pretend mode, so not writing to #{@config_file}"
+          debug { "I would have written: \n#{doc}" }
+          @pretend_output = doc
+        else
+          File.open(@config_file, 'w') {|f| f.write(doc)}
+        end
       end
 
       ## reloads the latest haproxy config
       def reload_haproxy
         info "Reloading haproxy: '#{@reload_cmd}'"
-        info `#{@reload_cmd}`
+
+        if @pretend
+          @pretend_reloads += 1
+        else
+          info `#{@reload_cmd}`
+        end
       end
       
       def invoke(availability_processor)
@@ -56,13 +88,16 @@ module ReframeIt
         # service name => <list of [hostname, ip_address]>
         services = {}
 
-        # get the services we need to know about, along with the hostnames and
-        # ip addresses for them
-        availability_processor.all_ipv4addrs(true).each do |ip_addr, hostnames|
+        # get the services we need to know about, along with the hostnames,
+        # ip addresses, and ports for them
+        availability_processor.all_available(true, true).each do |ip_addr, hostnames|
           hostnames.each do |hostname|
+            port = hostname[/:.*$/]
+            hostname = hostname.gsub(/:.*$/, '')
+
             service = hostname[0..-3]
             services[service] ||= []
-            services[service] << [hostname, ip_addr]
+            services[service] << [hostname, ip_addr, port]
           end
         end
         
@@ -94,8 +129,8 @@ module ReframeIt
             if !done_replacing && ( (line =~ /^\s*#{marker_begin}/) || (line.strip.empty?) )
               # we got an empty line, or we got to a point where we started replacing last time
               lines << "#{marker_begin}"
-              services[processing_service].each do |hostname, ip|
-                lines << "  server #{hostname} #{ip} #{@extra_server_args}"
+              services[processing_service].each do |hostname, ip, port|
+                lines << "  server #{hostname} #{ip}#{port} #{@extra_server_args}"
               end
               lines << ""
               
@@ -146,7 +181,7 @@ module ReframeIt
         lines << ""
         write_config_file(lines.join("\n"))
         reload_haproxy
-        debug { "Updated haproxy" }    
+        debug { "Updated haproxy" }
       end
     end
   end

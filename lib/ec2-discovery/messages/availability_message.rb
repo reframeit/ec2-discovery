@@ -22,6 +22,8 @@ module ReframeIt
       ##
       # == Params: ==
       #  +services+ - array of services that are (un)available
+      #               the service names may include port specifiers of the 
+      #               form :port or :port1-port2
       #  +ipv4addr+ - the ip address of the services
       #  +available+ - whether or not the services are available
       #  +ttl+ - time-to-live seconds, after which others may consider

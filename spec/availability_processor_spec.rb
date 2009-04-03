@@ -4,49 +4,59 @@ require 'ec2-discovery/message_processors/availability_processor'
 include ReframeIt::EC2
 
 describe ReframeIt::EC2::AvailabilityProcessor do
-  describe "ipv4addrs" do
+  describe "availabile" do
     before(:each) do
       @proc = ReframeIt::EC2::AvailabilityProcessor.new
     end
 
     it "should be empty initially" do
-      @proc.ipv4addrs('some_service').should be_empty
+      @proc.available('some_service').should be_empty
     end
 
     it "should contain addresses for available services" do
       @proc.process(AvailabilityMessage.new(['service1','service2'], '1.2.3.4'))
       @proc.process(AvailabilityMessage.new(['service2','service3'], '2.3.4.5'))
       
-      @proc.ipv4addrs('service1').should == ['1.2.3.4']
-      @proc.ipv4addrs('service2').should == ['1.2.3.4','2.3.4.5']
-      @proc.ipv4addrs('service3').should == ['2.3.4.5']
+      @proc.available('service1').should == [ServiceAddress.new('1.2.3.4')]
+      @proc.available('service2').should == [ServiceAddress.new('1.2.3.4'),ServiceAddress.new('2.3.4.5')]
+      @proc.available('service3').should == [ServiceAddress.new('2.3.4.5')]
     end
 
     it "should not contain addresses for unavailable services" do
       @proc.process(AvailabilityMessage.new(['service1','service2'], '1.2.3.4'))
       @proc.process(AvailabilityMessage.new(['service2', 'service3'], '1.2.3.4', false))
       
-      @proc.ipv4addrs('service1').should == ['1.2.3.4']
-      @proc.ipv4addrs('service2').should == []
-      @proc.ipv4addrs('service3').should == []
+      @proc.available('service1').should == [ServiceAddress.new('1.2.3.4')]
+      @proc.available('service2').should == []
+      @proc.available('service3').should == []
     end
+
+    it "should keep port information" do
+      @proc.process(AvailabilityMessage.new(['service1:101','service2:102'], '1.2.3.4'))
+      @proc.process(AvailabilityMessage.new(['service2:202','service3:203'], '2.3.4.5'))
+      
+      @proc.available('service1').should == [ServiceAddress.new('1.2.3.4', ':101')]
+      @proc.available('service2').should == [ServiceAddress.new('1.2.3.4', ':102'),ServiceAddress.new('2.3.4.5', '202')]
+      @proc.available('service3').should == [ServiceAddress.new('2.3.4.5', '203')]
+    end
+
   end
 
-  describe "all_ipv4addrs" do
+  describe "all_available" do
     before(:each) do 
       @proc = ReframeIt::EC2::AvailabilityProcessor.new
     end
 
     it "should be empty initially" do
-      @proc.all_ipv4addrs.should be_empty
+      @proc.all_available.should be_empty
     end
 
-    it "should contain the available ip addresses" do
+    it "should contain the available addresses" do
       @proc.process(AvailabilityMessage.new(['service1','service2'], '1.2.3.4'))
       @proc.process(AvailabilityMessage.new(['service1','service2'], '2.3.4.5'))
 
-      @proc.all_ipv4addrs.has_key?('1.2.3.4').should be_true
-      @proc.all_ipv4addrs.has_key?('2.3.4.5').should be_true
+      @proc.all_available.has_key?('1.2.3.4').should be_true
+      @proc.all_available.has_key?('2.3.4.5').should be_true
     end
 
     it "should not contain unavailable ip addresses" do
@@ -54,8 +64,8 @@ describe ReframeIt::EC2::AvailabilityProcessor do
       @proc.process(AvailabilityMessage.new(['service1','service2'], '2.3.4.5'))
       @proc.process(AvailabilityMessage.new(['service1','service2'], '1.2.3.4', false))
 
-      @proc.all_ipv4addrs.has_key?('2.3.4.5').should be_true
-      @proc.all_ipv4addrs.has_key?('1.2.3.4').should be_false
+      @proc.all_available.has_key?('2.3.4.5').should be_true
+      @proc.all_available.has_key?('1.2.3.4').should be_false
     end
 
     it "should map ip addresses to the available services at those addresses" do
@@ -64,8 +74,8 @@ describe ReframeIt::EC2::AvailabilityProcessor do
       @proc.process(AvailabilityMessage.new(['service3'], '2.3.4.5'))
       @proc.process(AvailabilityMessage.new(['service1'], '2.3.4.5'))
 
-      @proc.all_ipv4addrs['1.2.3.4'].should == ['service1','service2']
-      @proc.all_ipv4addrs['2.3.4.5'].should == ['service1','service3']
+      @proc.all_available['1.2.3.4'].should == ['service1','service2']
+      @proc.all_available['2.3.4.5'].should == ['service1','service3']
     end
 
     it "should not map ip addresses to unavailable services at those addresses" do
@@ -75,36 +85,48 @@ describe ReframeIt::EC2::AvailabilityProcessor do
       @proc.process(AvailabilityMessage.new(['service3'], '2.3.4.5'))
       @proc.process(AvailabilityMessage.new(['service1'], '2.3.4.5'))
 
-      @proc.all_ipv4addrs['1.2.3.4'].should == ['service2']
-      @proc.all_ipv4addrs['2.3.4.5'].should == ['service1','service3']
+      @proc.all_available['1.2.3.4'].should == ['service2']
+      @proc.all_available['2.3.4.5'].should == ['service1','service3']
     end
 
     it "should map service names to hostnames with two digits appended to the service name" do
       @proc.process(AvailabilityMessage.new(['service'], '1.2.3.4'))
       @proc.process(AvailabilityMessage.new(['service'], '2.3.4.5'))
 
-      @proc.all_ipv4addrs(true)['1.2.3.4'].should == ['service01']
-      @proc.all_ipv4addrs(true)['2.3.4.5'].should == ['service02']
+      @proc.all_available(true)['1.2.3.4'].should == ['service01']
+      @proc.all_available(true)['2.3.4.5'].should == ['service02']
+    end
+
+    it "should keep port information when requested" do
+      @proc.process(AvailabilityMessage.new(['service:80'], '1.2.3.4'))
+      @proc.process(AvailabilityMessage.new(['service:81'], '1.2.3.4'))
+      @proc.process(AvailabilityMessage.new(['service:80'], '2.3.4.5'))
+
+      @proc.all_available(true, true)['1.2.3.4'].should == ['service01:80', 'service01:81']
+      @proc.all_available(true, true)['2.3.4.5'].should == ['service02:80']
     end
 
     it "should be consistent with hostnames" do
       @proc.process(AvailabilityMessage.new(['service'], '1.2.3.4'))
+
+      @proc.all_available(true)['1.2.3.4'].should == ['service01']
+
       @proc.process(AvailabilityMessage.new(['service'], '2.3.4.5'))
 
-      @proc.all_ipv4addrs(true)['1.2.3.4'].should == ['service01']
-      @proc.all_ipv4addrs(true)['2.3.4.5'].should == ['service02']
+      @proc.all_available(true)['1.2.3.4'].should == ['service01']
+      @proc.all_available(true)['2.3.4.5'].should == ['service02']
 
       @proc.process(AvailabilityMessage.new(['service'], '3.4.5.6'))
-      @proc.all_ipv4addrs(true)['1.2.3.4'].should == ['service01']
-      @proc.all_ipv4addrs(true)['2.3.4.5'].should == ['service02']
-      @proc.all_ipv4addrs(true)['3.4.5.6'].should == ['service03']
+      @proc.all_available(true)['1.2.3.4'].should == ['service01']
+      @proc.all_available(true)['2.3.4.5'].should == ['service02']
+      @proc.all_available(true)['3.4.5.6'].should == ['service03']
 
       # this is a redundant message and should be ignored by the processor
       @proc.process(AvailabilityMessage.new(['service'], '3.4.5.6'))
-      @proc.all_ipv4addrs(true)['1.2.3.4'].should == ['service01']
-      @proc.all_ipv4addrs(true)['2.3.4.5'].should == ['service02']
-      @proc.all_ipv4addrs(true)['3.4.5.6'].should == ['service03']
-      @proc.all_ipv4addrs(true).size.should == 3
+      @proc.all_available(true)['1.2.3.4'].should == ['service01']
+      @proc.all_available(true)['2.3.4.5'].should == ['service02']
+      @proc.all_available(true)['3.4.5.6'].should == ['service03']
+      @proc.all_available(true).size.should == 3
     end
 
   end

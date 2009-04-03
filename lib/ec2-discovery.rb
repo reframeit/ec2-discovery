@@ -54,9 +54,9 @@ module ReframeIt
               queue = sqs.queue(msg.response_queue)
               msg.services.each do |service|
                 # send an availability message for each service
-                ipv4addrs = avail_processor.ipv4addrs(service)
-                ipv4addrs.each do |ipv4addr|
-                  avail_msg = AvailabilityMessage.new([service],ipv4addr,true)
+                addrs = avail_processor.available(service)
+                addrs.each do |addr|
+                  avail_msg = AvailabilityMessage.new(["service#{addr.port}"],addr.ipv4,true)
                   debug { "sending availability msg #{avail_msg.inspect}" }
                 send_message(queue, avail_msg)
                 end
@@ -73,9 +73,13 @@ module ReframeIt
           debug { "received availability message #{msg.inspect}" }
           begin
             msg.services.each do |service|
-              sub_processor.response_queues(service).each do |response_queue|
+              # service may have included a port, so strip that off when we
+              # search for subscribers
+              service_minus_port = service.gsub(/:.*$/, '')
+
+              sub_processor.response_queues(service_minus_port).each do |response_queue|
                 # original message may have included more services 
-                # than what the subscriber is interested in
+                # other than what the subscriber is interested in
                 avail_msg = AvailabilityMessage.new([service], msg.ipv4addr, msg.available, msg.ttl)
                 debug { "sending availability message #{avail_msg.inspect}" }
                 send_message(sqs.queue(response_queue), avail_msg)
@@ -89,19 +93,23 @@ module ReframeIt
         # TODO: allow control over this thread
         unavail_thread = Thread.new do
           while true
-            avail_processor.expired.each do |service, ip_list|
-              info { "#{service} on #{ip_list.inspect} expired" }
-              sub_processor.response_queues(service).each do |response_queue|
-                ip_list.each do |ip|
-                  msg = AvailabilityMessage.new([service], ip, false, -1)
-                  debug { "sending unavailable message #{msg.inspect} to #{response_queue}" }
-                  begin
-                    send_message(sqs.queue(response_queue), msg)
-                  rescue Exception => ex
-                    error "Error sending unavailable message #{msg.inspect} to #{response_queue}", ex
+            begin
+              avail_processor.expired.each do |service, addr_list|
+                info { "#{service} on #{addr_list.inspect} expired" }
+                sub_processor.response_queues(service).each do |response_queue|
+                  addr_list.each do |addr|
+                    msg = AvailabilityMessage.new(["#{service}#{addr.port}"], addr.ipv4, false, -1)
+                    debug { "sending unavailable message #{msg.inspect} to #{response_queue}" }
+                    begin
+                      send_message(sqs.queue(response_queue), msg)
+                    rescue Exception => ex
+                      error "Error sending unavailable message #{msg.inspect} to #{response_queue}", ex
+                    end
                   end
                 end
               end
+            rescue Exception => ex
+              error "Unexpected exception in expiration thread!", ex
             end
             sleep 1
           end
@@ -134,7 +142,7 @@ module ReframeIt
         listener = QueueListener.new(queue)
         avail_proc = AvailabilityProcessor.new
         avail_proc.availability_changed = Proc.new do |availability_processor|
-          info { "Availability Changed! New list is:\n #{availability_processor.all_ipv4addrs.inspect}" }
+          info { "Availability Changed! New list is:\n #{availability_processor.all_available(false, true).inspect}" }
           debug { "received availability message #{availability_processor}" }
           actions.each do |action|
             begin
@@ -379,6 +387,8 @@ module ReframeIt
       # In addition, this gem uses some pre-determined user data types:
       # provide - a service that this instance provides
       #           specify multiple services by multiple provide=<name> lines.
+      #           If the service runs on a specific port (N), it should be specified as 
+      #           service:N, or if it runs on a range of ports (N-M), service:N-M
       # subscribe - like provide, but declaring a service that this instance
       #             is interested in getting updates about
       #
