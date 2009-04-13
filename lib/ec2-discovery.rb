@@ -56,7 +56,7 @@ module ReframeIt
                 # send an availability message for each service
                 addrs = avail_processor.available(service)
                 addrs.each do |addr|
-                  avail_msg = AvailabilityMessage.new(["service#{addr.port}"],addr.ipv4,true)
+                  avail_msg = AvailabilityMessage.new(["#{service}#{addr.port}"],addr.ipv4,true)
                   debug { "sending availability msg #{avail_msg.inspect}" }
                 send_message(queue, avail_msg)
                 end

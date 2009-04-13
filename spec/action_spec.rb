@@ -104,7 +104,7 @@ describe ReframeIt::EC2::UpdateHAProxy do
   it "should remove any old entries" do
     discovery1 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
     discovery2 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
-    
+
     discovery1.stub!(:ec2_user_data).and_return('')
     discovery2.stub!(:ec2_user_data).and_return('')
     
