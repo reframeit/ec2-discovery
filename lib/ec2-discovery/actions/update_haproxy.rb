@@ -178,7 +178,10 @@ module ReframeIt
           end
         end
 
-        lines << ""
+        if !lines.last || !lines.last.empty?
+          lines << ""
+        end
+
         write_config_file(lines.join("\n"))
         reload_haproxy
         debug { "Updated haproxy" }
