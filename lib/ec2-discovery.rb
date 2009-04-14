@@ -194,10 +194,10 @@ module ReframeIt
       # Returns: broadcast thread, or nil if there is nothing to broadcast or
       # this is a one-time broadcast
       ##
-      def broadcast_availability(provides = [], interval=3)
+      def broadcast_availability(provides = [], interval=10)
         return nil if provides.empty?
 
-        avail_msg = AvailabilityMessage.new(provides, local_ipv4, true)
+        avail_msg = AvailabilityMessage.new(provides, local_ipv4, true, interval*3)
         if interval == -1
           send_message(monitor_queue, avail_msg)
           return nil
