@@ -130,7 +130,11 @@ module ReframeIt
               # we got an empty line, or we got to a point where we started replacing last time
               lines << "#{marker_begin}"
               services[processing_service].each do |hostname, ip, port|
-                lines << "  server #{hostname} #{ip}#{port} #{@extra_server_args}"
+                if processing_service =~ /mysql/
+                  lines << "  server #{hostname} #{ip}#{port} check port 22 inter 10000"
+                else
+                  lines << "  server #{hostname} #{ip}#{port} #{@extra_server_args}"
+                end
               end
               lines << ""
               
