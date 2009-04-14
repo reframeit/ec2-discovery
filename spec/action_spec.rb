@@ -8,6 +8,8 @@ describe ReframeIt::EC2::UpdateHosts do
     discovery1 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
     discovery2 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
     
+    discovery1.sqs.reset
+    
     discovery1.stub!(:ec2_user_data).and_return('')
     discovery2.stub!(:ec2_user_data).and_return('')
     
@@ -56,6 +58,8 @@ describe ReframeIt::EC2::UpdateHAProxy do
     discovery1 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
     discovery2 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
     
+    discovery1.sqs.reset
+
     discovery1.stub!(:ec2_user_data).and_return('')
     discovery2.stub!(:ec2_user_data).and_return('')
     
@@ -105,6 +109,8 @@ describe ReframeIt::EC2::UpdateHAProxy do
     discovery1 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
     discovery2 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
 
+    discovery1.sqs.reset
+
     discovery1.stub!(:ec2_user_data).and_return('')
     discovery2.stub!(:ec2_user_data).and_return('')
     
@@ -148,5 +154,55 @@ describe ReframeIt::EC2::UpdateHAProxy do
 
     reloads.should be >= 1
     output.should =~ /backend service_b\n\nbackend service_a\n## BEGIN ec2-discovery ##\n  server service_a01 1.1.1.1 check inter 1000\n\nbackend service_c\n\n/
+  end
+
+  it "should adhere to per-service overrides" do
+    discovery1 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
+    discovery2 = ReframeIt::EC2::Discovery.new('aws_id', 'secret_key')
+    
+    discovery1.sqs.reset
+
+    discovery1.stub!(:ec2_user_data).and_return('')
+    discovery2.stub!(:ec2_user_data).and_return('')
+    
+    discovery1.stub!(:provides).and_return(['monitor','service_a:4000', 'service_c'])
+    discovery1.stub!(:subscribes).and_return([])
+    
+    discovery2.stub!(:provides).and_return(['service_b'])
+    discovery2.stub!(:subscribes).and_return(['service_a', 'service_c'])
+
+    discovery2.stub!(:action_strs).and_return(['UpdateHAProxy.new("haproxy.cfg", "haproxy reload", "check inter 1000", {"service_a" => "check port 22 inter 3000"})'])
+    
+    discovery1.stub!(:local_ipv4).and_return('1.1.1.1')
+    discovery2.stub!(:local_ipv4).and_return('2.2.2.2')
+    discovery1.stub!(:instance_id).and_return('discovery1')
+    discovery2.stub!(:instance_id).and_return('discovery2')
+
+    action = discovery2.actions.first
+    action.class.should == ReframeIt::EC2::UpdateHAProxy
+
+    # it may not update fully the first call, so only do checks on the last
+    # document that it updates
+    action.pretend = true
+    action.pretend_input = ["backend service_b\n", "\n", "backend service_a\n", "\n", "backend service_c\n", "## BEGIN ec2-discovery ##\n", "  server old_server 5.5.5.5"]
+
+    thread1 = Thread.new do
+      discovery1.run
+    end
+    
+    thread2 = Thread.new do
+      discovery2.run
+    end
+    
+    sleep 5
+
+    reloads = action.pretend_reloads
+    output = action.pretend_output
+
+    thread1.kill
+    thread2.kill
+
+    reloads.should be >= 1
+    output.should =~ /backend service_b\n\nbackend service_a\n## BEGIN ec2-discovery ##\n  server service_a01 1.1.1.1:4000 check port 22 inter 3000\n\nbackend service_c\n## BEGIN ec2-discovery ##\n  server service_c01 1.1.1.1 check inter 1000\n/
   end
 end
