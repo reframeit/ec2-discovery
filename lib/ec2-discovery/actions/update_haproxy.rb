@@ -37,13 +37,17 @@ module ReframeIt
       # +extra_server_args+ - we can optionally append some args to the end of the server
       #                       declaration lines, like "check inter 1000"
       # +reload_cmd+ - the command we should use to reload haproxy (without stopping it)
+      # +per_service_server_args+ - hash of service name to the specific
+      #                             service args for that service
       ##
       def initialize(config_file = "/etc/haproxy.cfg",
                      reload_cmd = "/etc/init.d/haproxy reload",
-                     extra_server_args = "check inter 1000")
+                     extra_server_args = "check inter 1000",
+                     per_service_server_args = {})
         @config_file = config_file
         @reload_cmd = reload_cmd
         @extra_server_args = extra_server_args
+        @per_service_server_args = per_service_server_args
         @pretend = false
         @pretend_reloads = 0
       end
