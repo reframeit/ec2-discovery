@@ -49,7 +49,10 @@ module ReframeIt
       def process(msg)
         clazz = msg.class
 
-        return if msg.respond_to?(:timestamp) && (msg.timestamp + @ignore_time < Time.now.to_i)
+        if msg.respond_to?(:timestamp) && (msg.timestamp + @ignore_time < Time.now.to_i)
+          info{ "Ignoring message #{msg.inspect} with timestamp #{Time.now.to_i - msg.timestamp} seconds ago" }
+          return
+        end
 
         # process all superclasses that are compatible with Message
         while clazz && clazz <= Message

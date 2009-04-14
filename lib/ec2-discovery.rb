@@ -207,6 +207,7 @@ module ReframeIt
         avail_thread = Thread.new do
           while true
             begin
+              avail_msg.update_timestamp
               debug { "sending availability message #{avail_msg.inspect}" }
               send_message(monitor_queue, avail_msg)
             rescue Exception => ex

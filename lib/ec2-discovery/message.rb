@@ -56,6 +56,10 @@ module ReframeIt
         @timestamp = ts.to_i
       end
 
+      def update_timestamp
+        @timestamp = Time.now.to_i
+      end
+
       def to_json(*a)
         data = {}
         self.class.serialized_attributes.each do |attr|
