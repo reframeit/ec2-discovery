@@ -19,6 +19,7 @@ describe ReframeIt::EC2::AvailabilityMessage do
       msg2.services.should == ['service1', 'service2']
       msg2.ipv4addr.should == '127.0.0.1'
       msg2.available.should be_false
+      msg2.timestamp.to_i.should be_close Time.now.to_i, 3
     end
   end
 end

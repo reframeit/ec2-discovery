@@ -17,11 +17,17 @@ module ReframeIt
       attr_accessor :wait_time
 
       ##
+      # ignore messages that are this many seconds old (or older)
+      ##
+      attr_accessor :ignore_time
+
+      ##
       # +sqs_queue+ The RightAws::SqsGen2::Queue that this listener listens to
       ##
-      def initialize(sqs_queue, wait_time = 1)
+      def initialize(sqs_queue, wait_time = 1, ignore_time = 300)
         @sqs_queue = sqs_queue
         @wait_time = wait_time
+        @ignore_time = ignore_time
 
         # a hash of message class => Array<msg processors for that class>
         @processors = {}
@@ -42,6 +48,8 @@ module ReframeIt
       ##
       def process(msg)
         clazz = msg.class
+
+        return if msg.respond_to?(:timestamp) && (msg.timestamp + @ignore_time < Time.now.to_i)
 
         # process all superclasses that are compatible with Message
         while clazz && clazz <= Message
