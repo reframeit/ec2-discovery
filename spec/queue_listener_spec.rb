@@ -74,6 +74,46 @@ describe ReframeIt::EC2::QueueListener do
       proc1_called.should be_true
       proc2_called.should be_false
     end
+    
+    it "should skip old messages" do
+      queue = ReframeIt::EC2::QueueListener.new(nil, 1, 5)
+      proc1_called = false
+      proc2_called = false
+
+      proc1 = ReframeIt::EC2::MessageProcessor.new(MyMessage) do |msg|
+        proc1_called = true
+      end
+
+      proc2 = ReframeIt::EC2::MessageProcessor.new(MyMessage2) do |msg|
+        proc2_called = true
+      end
+
+      queue.add_processor(proc1)
+      queue.add_processor(proc2)
+
+      old_msgs = []
+      10.times do |i|
+        old_msg = MyMessage.new("value#{i}")
+        old_msg.timestamp = Time.now - 10
+        old_msgs << old_msg
+
+        old_msg = MyMessage2.new("value#{i}")
+        old_msg.timestamp = Time.now - 10
+        old_msgs << old_msg
+      end
+
+      queue.process(old_msgs)
+      
+      proc1_called.should be_false
+      proc2_called.should be_false
+
+      queue.process(MyMessage.new("value1"))
+      proc1_called.should be_true
+      proc2_called.should be_false
+
+      queue.process(MyMessage2.new("value2"))
+      proc2_called.should be_true
+    end
   end
 
   describe "listen" do

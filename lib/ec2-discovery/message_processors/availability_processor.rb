@@ -36,6 +36,29 @@ module ReframeIt
         @availability_changed = nil
       end
 
+      ##
+      # fire that the availability has change
+      # this signals that the availability_changed block, if any, will be called,
+      # but allows for multiple fires in close proximity to be grouped together
+      #
+      # +max_wait_time+ - number of seconds that we will wait, at most,
+      #                   before firing off the availability_changed block
+      ##
+      def fire_availability_changed(max_wait_time = 3)
+        if @availability_changed && !@availability_changed_thread
+          outer = self
+          @availability_changed_thread = Thread.new do
+            sleep max_wait_time
+            begin
+              @availability_changed.call(outer)
+            rescue Exception => ex
+              error "Exception while executing availability_changed block!", ex
+            end
+            @availability_changed_thread = nil
+          end
+        end
+      end
+
       def process_impl(msg)
         changed = false
 
@@ -49,10 +72,11 @@ module ReframeIt
             if !@available[service].include?(address)
               @available[service] << address
               changed = true
+              debug{ "Availability changed because #{service} at #{address.inspect} is available" }
             end
             if @keep_track_of_expires
               @expires[service] ||= {}
-              @expires[service][address] = Time.now + msg.ttl
+              @expires[service][address] = Time.now + 2*msg.ttl
               debug { "#{service} at #{address.inspect} will expire in #{msg.ttl} seconds (at #{@expires[service][address]})" }
             end
           end
@@ -65,6 +89,7 @@ module ReframeIt
             if @available[service]
               @available[service].delete(address)
               changed = true
+              debug{ "Availability changed because #{service} at #{address.inspect} is unavailable" }
             end
             
             if @keep_track_of_expires
@@ -73,15 +98,8 @@ module ReframeIt
           end
         end
 
-        # if we have an availability_changed listener, let them know
-        # that our list has changed.
-        if changed && @availability_changed
-          begin
-            @availability_changed.call(self)
-          rescue Exception => ex
-            error "Exception while executing availability_changed block!", ex
-          end
-        end
+        # let any listeners (eventually) know about the change in availability
+        fire_availability_changed if changed
       end
 
       ##
