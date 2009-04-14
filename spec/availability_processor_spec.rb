@@ -132,7 +132,7 @@ describe ReframeIt::EC2::AvailabilityProcessor do
   end
 
 
-  describe "availability_changes" do
+  describe "availability_changed" do
     before(:each) do 
       @proc = ReframeIt::EC2::AvailabilityProcessor.new
     end
@@ -144,18 +144,22 @@ describe ReframeIt::EC2::AvailabilityProcessor do
       end
 
       @proc.process(AvailabilityMessage.new(['service'], '1.2.3.4'))
+      sleep 5
       called.should be_true
 
       called = false
       @proc.process(AvailabilityMessage.new(['service'], '2.3.4.5'))
+      sleep 5
       called.should be_true
 
       called = false
       @proc.process(AvailabilityMessage.new(['service_b'], '1.2.3.4'))
+      sleep 5
       called.should be_true
 
       called = false
       @proc.process(AvailabilityMessage.new(['service'], '1.2.3.4', false))
+      sleep 5
       called.should be_true
     end
 

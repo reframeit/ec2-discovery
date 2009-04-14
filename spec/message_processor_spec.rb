@@ -8,7 +8,7 @@ class MyMessage < ReframeIt::EC2::Message
     [:myfield1]
   end
 
-  def initialize(myfield1)
+  def initialize(myfield1= '')
     @myfield1 = myfield1
   end
 end

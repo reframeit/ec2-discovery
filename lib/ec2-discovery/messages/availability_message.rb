@@ -30,7 +30,7 @@ module ReframeIt
       #          these services down if no new availability messages
       #          are received
       ##
-      def initialize(services=[], ipv4addr='', available = true, ttl = 10)
+      def initialize(services=[], ipv4addr='', available = true, ttl = 60)
         @services = services
         @ipv4addr = ipv4addr
         @available = available

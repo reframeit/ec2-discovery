@@ -52,14 +52,24 @@ module ReframeIt
               info { "received subscription from #{msg.response_queue} for #{msg.services.inspect}" }
               debug { "got subscription #{msg.inspect}" }
               queue = sqs.queue(msg.response_queue)
+
+              # determine which services that this subscriber is interested in,
+              # and organize them by ipv4 address (so we can send a minimal amount of messages)
+              ipv4_services = {}
+
               msg.services.each do |service|
                 # send an availability message for each service
                 addrs = avail_processor.available(service)
                 addrs.each do |addr|
-                  avail_msg = AvailabilityMessage.new(["#{service}#{addr.port}"],addr.ipv4,true)
-                  debug { "sending availability msg #{avail_msg.inspect}" }
-                send_message(queue, avail_msg)
+                  ipv4_services[addr.ipv4] ||= []
+                  ipv4_services[addr.ipv4] |= ["#{service}#{addr.port}"]
                 end
+              end
+
+              ipv4_services.each do |ipv4, services|
+                avail_msg = AvailabilityMessage.new(services, ipv4, true)
+                debug { "sending availability msg #{avail_msg.inspect}" }
+                send_message(queue, avail_msg)
               end
             end
           rescue Exception => ex
